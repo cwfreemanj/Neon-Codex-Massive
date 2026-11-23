@@ -8,13 +8,20 @@ const http = require('http'), fs = require('fs'), path = require('path'), crypto
 const { WebSocketServer } = require('ws');
 
 const PORT = +process.env.PORT || 8080;
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+/* Railway sets RAILWAY_VOLUME_MOUNT_PATH when a volume is attached: use it automatically if DATA_DIR was not set. */
+const VOLUME = process.env.RAILWAY_VOLUME_MOUNT_PATH || '';
+const DATA_DIR = process.env.DATA_DIR || VOLUME || path.join(__dirname, 'data');
+const ON_RAILWAY = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID);
+const PERSISTENT = !ON_RAILWAY || (!!VOLUME && path.resolve(DATA_DIR).startsWith(path.resolve(VOLUME)));
 const SECRET = process.env.WIX_SHARED_SECRET || '';
 const ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const DEV_GRANT = process.env.DEV_GRANT === '1';
 const HUB_CAP = 50, PARTY_MAX = 8, GUILD_COST = 1000, GUILD_MAX = 50;
 const TICK_MS = 100, EARN_PER_MIN = 400;
 fs.mkdirSync(DATA_DIR, { recursive: true });
+const D_SAVES = path.join(DATA_DIR, 'saves'), D_HUBS = path.join(DATA_DIR, 'hubs'), D_BAK = path.join(DATA_DIR, 'backups');
+for (const d of [D_SAVES, D_HUBS, D_BAK]) fs.mkdirSync(d, { recursive: true });
+if (!PERSISTENT) console.warn('\n' + '!'.repeat(78) + '\n!! WARNING: running on Railway WITHOUT a volume. Every redeploy or restart ERASES all accounts,\n!! cloud saves, guilds and player hubs. Fix: Railway → this service → Settings → Volumes → add a\n!! volume mounted at /data (DATA_DIR is picked up automatically). See README §1.\n' + '!'.repeat(78) + '\n');
 
 /* ---------------------------------------------------------------- persistence */
 const F_PLAYERS = path.join(DATA_DIR, 'players.json'), F_GUILDS = path.join(DATA_DIR, 'guilds.json'), F_MISC = path.join(DATA_DIR, 'misc.json');
@@ -24,8 +31,30 @@ const guilds = new Map(Object.entries(readJSON(F_GUILDS, {})));
 const misc = readJSON(F_MISC, { orders: {}, pending: {}, seq: 1 });
 let dirty = false, saveT = null;
 function markDirty() { dirty = true; if (!saveT) saveT = setTimeout(flush, 1500); }
-function writeAtomic(f, obj) { const t = f + '.tmp'; fs.writeFileSync(t, JSON.stringify(obj)); fs.renameSync(t, f); }
-function flush() { saveT = null; if (!dirty) return; dirty = false; try { writeAtomic(F_PLAYERS, Object.fromEntries(players)); writeAtomic(F_GUILDS, Object.fromEntries(guilds)); writeAtomic(F_MISC, misc); } catch (e) { console.error('save failed', e.message); dirty = true; } }
+function writeAtomic(f, obj) { const t = f + '.tmp'; fs.writeFileSync(t, typeof obj === 'string' || Buffer.isBuffer(obj) ? obj : JSON.stringify(obj)); fs.renameSync(t, f); }
+/* big per-player data lives in its own files so players.json stays small and fast to rewrite:
+   saves/<id>.json (cloud save, previous version kept as <id>.prev.json) · hubs/<id>.json (published scenes) · hubs/<id>.jpg (Atlas preview shot) */
+const safeId = id => String(id).replace(/[^a-z0-9]/gi, '').slice(0, 40);
+const blobPath = (kind, id) => kind === 'save' ? path.join(D_SAVES, safeId(id) + '.json') : kind === 'shot' ? path.join(D_HUBS, safeId(id) + '.jpg') : path.join(D_HUBS, safeId(id) + '.json');
+const pendingBlobs = new Map();   // "kind:id" -> {kind,id,v}  (v === null deletes)
+function putBlob(kind, id, v) { pendingBlobs.set(kind + ':' + id, { kind, id, v }); markDirty(); }
+function getBlob(kind, id) {
+  const pb = pendingBlobs.get(kind + ':' + id); if (pb) return pb.v;
+  try { const raw = fs.readFileSync(blobPath(kind, id)); return kind === 'shot' ? raw : JSON.parse(raw.toString('utf8')); } catch (e) { return null; }
+}
+function flushBlobs() {
+  for (const [k, b] of [...pendingBlobs]) {
+    const f = blobPath(b.kind, b.id);
+    try {
+      if (b.v === null) { try { fs.unlinkSync(f); } catch (e) { } }
+      else { if (b.kind === 'save' && fs.existsSync(f)) { try { fs.copyFileSync(f, f.replace(/\.json$/, '.prev.json')); } catch (e) { } } writeAtomic(f, b.kind === 'shot' ? b.v : JSON.stringify(b.v)); }
+      if (pendingBlobs.get(k) === b) pendingBlobs.delete(k);
+    } catch (e) { console.error('blob save failed', k, e.message); dirty = true; }
+  }
+}
+function flush() { saveT = null; if (!dirty) return; dirty = false; try { flushBlobs(); writeAtomic(F_PLAYERS, Object.fromEntries(players)); writeAtomic(F_GUILDS, Object.fromEntries(guilds)); writeAtomic(F_MISC, misc); } catch (e) { console.error('save failed', e.message); dirty = true; } if (dirty && !saveT) saveT = setTimeout(flush, 5000); }
+/* hourly snapshot of the small files (accounts, guilds, orders); the last 72 are kept */
+function backup() { try { const tag = new Date().toISOString().slice(0, 13).replace(/[:T]/g, '-'); writeAtomic(path.join(D_BAK, 'state-' + tag + '.json'), JSON.stringify({ t: now(), players: Object.fromEntries(players), guilds: Object.fromEntries(guilds), misc })); const all = fs.readdirSync(D_BAK).filter(f => f.startsWith('state-')).sort(); for (const f of all.slice(0, Math.max(0, all.length - 72))) fs.unlinkSync(path.join(D_BAK, f)); } catch (e) { console.error('backup failed', e.message); } }
 for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { dirty = true; flush(); process.exit(0); });
 
 /* ---------------------------------------------------------------- helpers */
@@ -69,6 +98,15 @@ const online = new Map();          // pid -> conn
 const rooms = new Map();           // roomId -> {id, scene, cap, members:Set<pid>}
 const parties = new Map();         // partyId -> {id, leader, members:[pid], ready:null, allowed:Set<roomKey>}
 const names = new Map(); for (const p of players.values()) names.set(p.name.toLowerCase(), p.id);
+const tokenIdx = new Map();        // sha(token) -> pid (several devices per account)
+{ let moved = 0; for (const p of players.values()) {
+  if (p.tokenHash && !p.tokens) p.tokens = [p.tokenHash]; delete p.tokenHash; p.tokens = p.tokens || []; for (const h of p.tokens) tokenIdx.set(h, p.id);
+  if (p.save && p.save.blob) { putBlob('save', p.id, { t: p.save.t, blob: p.save.blob }); p.save = { t: p.save.t }; moved++; }
+  p.hub = p.hub || { public: false, updated: 0 }; if (p.hub.scenes) { putBlob('hub', p.id, p.hub.scenes); delete p.hub.scenes; p.hub.has = true; moved++; }
+  hubStats(p); }
+  console.log(`loaded ${players.size} players · ${guilds.size} guilds · ${[...players.values()].filter(p => p.hub && p.hub.has && p.hub.public).length} public hubs from ${DATA_DIR}${PERSISTENT ? '' : '  (NOT PERSISTENT)'}`);
+  if (moved) { dirty = true; flush(); console.log('moved ' + moved + ' saves/hubs into per-player files'); } }
+function hubStats(p) { const h = p.hub; h.plays = h.plays | 0; h.done = h.done | 0; h.likes = h.likes && typeof h.likes === 'object' ? h.likes : {}; h.seen = h.seen || {}; h.fin = h.fin || {}; return h; }
 
 function send(c, o) { if (c && c.ws && c.ws.readyState === 1) { try { c.ws.send(JSON.stringify(o)); } catch (e) { } } }
 function sendId(id, o) { send(online.get(id), o); }
@@ -76,7 +114,7 @@ function sendRoom(room, o, except) { if (!room) return; const s = JSON.stringify
 
 function newPlayer(name) {
   const id = 'p' + (misc.seq++).toString(36) + rid(2);
-  const p = { id, name, created: now(), hero: 'starr', pal: {}, pres: {}, stars: 0, earned: 0, levels: {}, kills: 0, chapters: 0, bosses: 0, play: 0, friends: [], frIn: [], guild: null, gInv: [], q: null, hub: { public: false, scenes: null, updated: 0 }, save: null, lastSeen: now() };
+  const p = { id, name, created: now(), hero: 'starr', pal: {}, pres: {}, stars: 0, earned: 0, levels: {}, kills: 0, chapters: 0, bosses: 0, play: 0, friends: [], frIn: [], guild: null, gInv: [], q: null, hub: { public: false, updated: 0, plays: 0, done: 0, likes: {}, seen: {}, fin: {} }, save: null, tokens: [], lastSeen: now() };
   players.set(id, p); names.set(name.toLowerCase(), id); markDirty(); return p;
 }
 const power = p => Object.values(p.levels || {}).reduce((a, b) => a + b, 0) + 30 * Object.values(p.pres || {}).reduce((a, b) => a + b, 0);
@@ -85,7 +123,7 @@ function appearance(p) { return { id: p.id, name: p.name, hero: p.hero, pal: p.p
 function profileOf(p, viewer) {
   const g = p.guild && guilds.get(p.guild);
   return { id: p.id, name: p.name, hero: p.hero, pal: p.pal, levels: p.levels, pres: p.pres || {}, power: power(p), kills: p.kills, chapters: p.chapters, bosses: p.bosses, play: p.play, online: online.has(p.id), created: p.created,
-    guild: g ? { id: g.id, name: g.name, tag: g.tag, icon: g.icon, level: guildLevel(g) } : null, hubPublic: !!(p.hub && p.hub.public && p.hub.scenes), friend: !!(viewer && viewer.friends.includes(p.id)), self: !!(viewer && viewer.id === p.id), party: online.get(p.id) ? !!online.get(p.id).party : false };
+    guild: g ? { id: g.id, name: g.name, tag: g.tag, icon: g.icon, level: guildLevel(g) } : null, hubPublic: !!(p.hub && p.hub.public && p.hub.has), friend: !!(viewer && viewer.friends.includes(p.id)), self: !!(viewer && viewer.id === p.id), party: online.get(p.id) ? !!online.get(p.id).party : false };
 }
 
 /* ---------------------------------------------------------------- rooms */
@@ -230,35 +268,106 @@ function leaderboard(cat) {
 }
 
 /* ---------------------------------------------------------------- connection handling */
-function authenticate(m) {
-  const name = cleanText(m.name, 16); let p = null, token = null, newTok = null;
+/* passwords are optional: they let a player sign in to the same account from any browser or device with name + password */
+const PW_MIN = 6;
+function pwMake(pw) { const salt = rid(12); return { salt, hash: crypto.scryptSync(String(pw), salt, 32).toString('hex') }; }
+function pwOk(p, pw) { if (!p.pw || typeof pw !== 'string' || !pw) return false; try { return safeEq(crypto.scryptSync(pw, p.pw.salt, 32).toString('hex'), p.pw.hash); } catch (e) { return false; } }
+function addToken(p) { const tok = rid(24), h = sha(tok); p.tokens = (p.tokens || []).concat(h); while (p.tokens.length > 12) tokenIdx.delete(p.tokens.shift()); tokenIdx.set(h, p.id); markDirty(); return tok; }
+const pwFails = new Map();         // name/ip -> {n, t}
+function throttled(k) { const f = pwFails.get(k); return !!(f && f.n >= 6 && now() - f.t < 10 * 60000); }
+function failed(k) { const f = pwFails.get(k) || { n: 0, t: now() }; if (now() - f.t > 10 * 60000) { f.n = 0; f.t = now(); } f.n++; pwFails.set(k, f); }
+function authenticate(m, ip) {
+  const name = cleanText(m.name, 16); let p = null, newTok = null;
   // Wix identity (signed by your Wix backend): {id, ts, sig}
   const w = m.wix; let wixId = null;
   if (w && SECRET && typeof w.id === 'string' && safeEq(hmac(w.id + '|' + num(w.ts)), w.sig) && Math.abs(now() - num(w.ts)) < 2 * 864e5) wixId = cleanText(w.id, 64);
   if (wixId) p = [...players.values()].find(x => x.wix === wixId) || null;
-  if (!p && m.token && typeof m.token === 'string') { const h = sha(m.token); p = [...players.values()].find(x => x.tokenHash === h) || null; }
-  if (!p) { if (!validName(name)) return { err: 'Names are 3–16 letters, numbers, spaces, _ or -.' }; if (names.has(name.toLowerCase())) return { err: 'That name is taken — pick another.' }; p = newPlayer(name); newTok = rid(24); p.tokenHash = sha(newTok); }
+  if (!p && m.token && typeof m.token === 'string') { const id = tokenIdx.get(sha(m.token)); p = id ? players.get(id) || null : null; }
+  if (!p && name && names.has(name.toLowerCase())) {          // existing name: password sign-in
+    const q = players.get(names.get(name.toLowerCase())), k1 = 'n:' + name.toLowerCase(), k2 = 'i:' + (ip || '');
+    if (typeof m.pw === 'string' && m.pw) {
+      if (throttled(k1) || throttled(k2)) return { err: 'Too many wrong passwords — wait a few minutes and try again.', code: 'slow' };
+      if (pwOk(q, m.pw)) { p = q; newTok = addToken(p); } else { failed(k1); failed(k2); return { err: q.pw ? 'Wrong password for ' + q.name + '.' : q.name + ' has no password yet — sign in with its recovery key, then set one in Social → Account.', code: 'badpw', name: q.name, hasPw: !!q.pw }; }
+    } else return { err: q.pw ? 'That name is taken. If it is yours, enter its password below.' : 'That name is taken. If it is yours, sign in with its recovery key (or pick another name).', code: 'taken', name: q.name, hasPw: !!q.pw };
+  }
+  if (!p && m.recover) return { err: 'That recovery key does not match any account on this server.', code: 'nokey' };
+  if (!p) { if (!validName(name)) return { err: 'Names are 3–16 letters, numbers, spaces, _ or -.' }; p = newPlayer(name); newTok = addToken(p); if (typeof m.newpw === 'string' && m.newpw.length >= PW_MIN && m.newpw.length <= 64) p.pw = pwMake(m.newpw); }
   if (wixId && !p.wix) { p.wix = wixId; const pend = misc.pending[wixId]; if (pend) { p.stars += pend; delete misc.pending[wixId]; } markDirty(); }
+  if (wixId && !newTok && !(m.token && tokenIdx.get(sha(m.token)) === p.id)) newTok = addToken(p);
   return { p, token: newTok };
 }
 function onHello(c, m) {
-  const a = authenticate(m); if (a.err) return send(c, { t: 'denied', text: a.err });
+  const a = authenticate(m, c.ip); if (a.err) return send(c, { t: 'denied', text: a.err, code: a.code || '', name: a.name || '', hasPw: !!a.hasPw });
   const p = a.p; const old = online.get(p.id); if (old && old !== c) { send(old, { t: 'kicked', text: 'Signed in from another place.' }); try { old.ws.close(); } catch (e) { } dropConn(old); }
   c.p = p; c.id = p.id; online.set(p.id, c); p.lastSeen = now();
   if (HEROES.includes(m.hero)) p.hero = m.hero; if (m.pal && typeof m.pal === 'object') p.pal = cleanPal(m.pal); setPres(p, m.pr);
   c.bucket = EARN_PER_MIN; c.bt = now(); c.joined = now();
   const g = p.guild && guilds.get(p.guild); if (p.guild && !g) p.guild = null;
-  send(c, { t: 'welcome', id: p.id, name: p.name, token: a.token, stars: p.stars, wix: !!p.wix, profile: profileOf(p, p), quests: ensureQuests(p), guild: g ? guildState(g, p.id) : null, invites: p.gInv.map(i => ({ guild: i.guild, name: i.name, from: i.fromName })), hasSave: !!p.save, saveT: p.save ? p.save.t : 0, devGrant: DEV_GRANT, caps: { hub: HUB_CAP, party: PARTY_MAX, guildCost: GUILD_COST }, icons: GUILD_ICONS, lvTable: G_LV });
+  send(c, { t: 'welcome', id: p.id, name: p.name, token: a.token, stars: p.stars, wix: !!p.wix, profile: profileOf(p, p), quests: ensureQuests(p), guild: g ? guildState(g, p.id) : null, invites: p.gInv.map(i => ({ guild: i.guild, name: i.name, from: i.fromName })), hasSave: !!(p.save && p.save.t), saveT: p.save ? p.save.t | 0 : 0, hasPw: !!p.pw, devGrant: DEV_GRANT, caps: { hub: HUB_CAP, party: PARTY_MAX, guildCost: GUILD_COST }, icons: GUILD_ICONS, lvTable: G_LV });
   pushFriends(p); markDirty();
 }
 const cleanPal = o => { const r = {}; for (const k of ['armor', 'trim', 'cloth', 'glow', 'hair', 'skin']) if (typeof o[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(o[k])) r[k] = o[k]; return r; };
 function dropConn(c) {
+  if (c.p) { if (c.savePend) applySave(c); if (c.hubPend) applyHub(c); }
   if (!c.id || online.get(c.id) !== c) return; leaveRoom(c); leaveParty(c, 'offline'); online.delete(c.id); const p = c.p; p.lastSeen = now(); p.play += 0; markDirty();
   for (const f of p.friends) sendId(f, { t: 'presence', id: p.id, online: false });
 }
-const COOL = { chat: 600, friend: 400, party: 300, guild: 300, hubpub: 15000, lb: 500, profile: 150, ready: 500, sync: 3000 };
+const COOL = { chat: 600, friend: 400, party: 300, guild: 300, hubpub: 4000, lb: 500, profile: 150, ready: 500, sync: 1000, atlas: 250, setpw: 2000 };
 const COOL_SCALE = process.env.COOL_SCALE != null ? +process.env.COOL_SCALE : 1; // tests set 0
 function limited(c, k) { const t = now(); c.cd = c.cd || {}; if (c.cd[k] && t - c.cd[k] < (COOL[k] || 0) * COOL_SCALE) return true; c.cd[k] = t; return false; }
+function applySave(c) { clearTimeout(c.saveT); c.saveT = null; const b = c.savePend; c.savePend = null; if (!b || !c.p) return; const t = now(); c.p.save = { t }; putBlob('save', c.p.id, { t, blob: b }); c.saveAt = t; send(c, { t: 'saved', at: t }); }
+function applyHub(c) {
+  clearTimeout(c.hubT); c.hubT = null; const m = c.hubPend; c.hubPend = null; if (!m || !c.p) return; const p = c.p, h = hubStats(p), t = now();
+  putBlob('hub', p.id, m.scenes); if (m.shot) { putBlob('shot', p.id, Buffer.from(m.shot.split(',')[1], 'base64')); h.shotV = t; }
+  h.has = true; h.public = !!m.public; h.updated = t; h.first = h.first || t; h.meta = hubMeta(m.scenes); c.hubAt = t; markDirty();
+  send(c, { t: 'hubpub', ok: true, public: h.public, entry: atlasEntry(p, p) });
+}
+/* ---------------------------------------------------------------- Hub Atlas: browse, like, play and clear other players' hubs */
+const ENEMIES = new Set(['mutant', 'parasite', 'nightshade', 'brute', 'pumpkin', 'razor', 'stalker', 'bulwark', 'golem', 'leaper', 'shockhopper', 'gorebull', 'ramshell', 'archer', 'sniper', 'hexer', 'spitter', 'mender', 'gravecaller', 'bomber', 'gorgrim', 'queen', 'vexis', 'colossus', 'sovereign', 'warrok', 'maw']);
+const KIND_RX = /^[a-z][a-z0-9_]{1,24}$/;
+function hubMeta(scenes) { // computed from the scenes themselves, never trusted from the client
+  const mon = {}, boss = {}, obj = [], nm = []; let objs = 0, area = 0;
+  for (const sc of scenes) {
+    if (!sc || typeof sc !== 'object') continue; const list = Array.isArray(sc.objs) ? sc.objs : []; objs += list.length; area += clamp(num(sc.w, 60), 10, 200) * clamp(num(sc.d, 60), 10, 200); nm.push(cleanText(sc.name, 40) || 'Scene');
+    for (const o of list) { if (!o || typeof o.k !== 'string') continue; const d = o.d && typeof o.d === 'object' ? o.d : {};
+      if (o.k === 'spawner') { const k = String(d.kind || 'mutant'); if (KIND_RX.test(k)) mon[k] = (mon[k] || 0) + clamp((d.count | 0) || 1, 1, 5); }
+      else if (o.k === 'bossSpawn') { const k = String(d.kind || 'warrok'); if (KIND_RX.test(k)) boss[k] = (boss[k] || 0) + 1; }
+      else if (ENEMIES.has(o.k)) mon[o.k] = (mon[o.k] || 0) + 1; }
+    const q = sc.quest; if (q && Array.isArray(q.steps) && q.steps.length) obj.push({ scene: cleanText(sc.name, 40) || 'Scene', title: cleanText(q.title, 48), steps: q.steps.slice(0, 12).map(st => ({ type: cleanText(st && st.type, 12), text: cleanText(st && st.text, 90) })) });
+  }
+  const main = scenes.find(x => x && x.id === 'mine-1') || scenes[0] || {};
+  return { title: cleanText(main.name, 40) || 'Dungeon', desc: cleanText(main.desc, 220), theme: cleanText(main.theme, 20), scenes: scenes.length, names: nm.slice(0, 6), objs, area, mon, boss, obj, quests: obj.length };
+}
+function prune(o, keepMs) { const ks = Object.keys(o); if (ks.length < 400) return; const lim = now() - keepMs; for (const k of ks) if (o[k] < lim) delete o[k]; }
+function countPlay(t, who) { const h = hubStats(t); if (h.seen[who] && now() - h.seen[who] < 20 * 60000) return false; h.seen[who] = now(); prune(h.seen, 864e5); h.plays++; markDirty(); return true; }
+function countDone(t, who, sec) { const h = hubStats(t); if (!(h.meta && h.meta.quests)) return false; if (h.fin[who] && now() - h.fin[who] < 6 * 3600000) return false; h.fin[who] = now(); prune(h.fin, 7 * 864e5); h.done++; sec = clamp(sec | 0, 0, 86400); if (sec > 5) { h.tsum = (h.tsum || 0) + sec; h.tn = (h.tn || 0) + 1; } markDirty(); return { sec }; }
+function hereCount(id) { const r = rooms.get('h:' + id); return r ? r.members.size : 0; }
+function atlasEntry(p, viewer) {
+  const h = hubStats(p), m = h.meta || {};
+  return { id: p.id, name: p.name, hero: p.hero, pal: p.pal, lv: (p.levels && p.levels[p.hero]) || 1, pr: (p.pres && p.pres[p.hero]) || 0, tag: p.guild && guilds.get(p.guild) ? guilds.get(p.guild).tag : '',
+    title: m.title || 'Dungeon', desc: m.desc || '', meta: m, plays: h.plays, likes: Object.keys(h.likes).length, done: h.done, best: h.best || null, avg: h.tn ? Math.round(h.tsum / h.tn) : 0,
+    updated: h.updated || 0, first: h.first || 0, shot: h.shotV || 0, here: hereCount(p.id), online: online.has(p.id), public: !!h.public, liked: !!(viewer && h.likes[viewer.id]), mine: !!(viewer && viewer.id === p.id) };
+}
+const ATLAS_SORT = {
+  top: (a, b) => score(b) - score(a), liked: (a, b) => Object.keys(b.hub.likes).length - Object.keys(a.hub.likes).length || b.hub.plays - a.hub.plays,
+  played: (a, b) => b.hub.plays - a.hub.plays, done: (a, b) => b.hub.done - a.hub.done || b.hub.plays - a.hub.plays, new: (a, b) => (b.hub.updated || 0) - (a.hub.updated || 0) };
+function score(p) { const h = p.hub, age = (now() - (h.updated || 0)) / 864e5; return Object.keys(h.likes).length * 4 + h.done * 3 + h.plays + hereCount(p.id) * 2 + (age < 3 ? 6 : age < 14 ? 2 : 0); }
+function atlasList(viewer, sort, q, page) {
+  q = cleanText(q, 24).toLowerCase(); sort = ATLAS_SORT[sort] ? sort : 'top';
+  const all = [...players.values()].filter(p => p.hub && p.hub.has && p.hub.public && (!q || p.name.toLowerCase().includes(q) || ((p.hub.meta && p.hub.meta.title) || '').toLowerCase().includes(q))).sort(ATLAS_SORT[sort]);
+  const per = 24, pg = clamp(page | 0, 0, 999);
+  return { rows: all.slice(pg * per, pg * per + per).map(p => atlasEntry(p, viewer)), total: all.length, page: pg, per, sort };
+}
+function setLike(t, viewer, on) { const h = hubStats(t); if (t.id === viewer.id) return false; if (on) h.likes[viewer.id] = now(); else delete h.likes[viewer.id]; markDirty(); return true; }
+function atlasOp(c, m) {
+  const p = c.p, op = m.op, t = typeof m.id === 'string' ? players.get(m.id) : null;
+  if (op === 'list') return send(c, { t: 'atlas', op: 'list', ...atlasList(p, m.sort, m.q, m.page) });
+  if (op === 'mine') return send(c, { t: 'atlas', op: 'mine', row: p.hub && p.hub.has ? atlasEntry(p, p) : null });
+  if (!t || !t.hub || !t.hub.has || !(t.hub.public || t.id === p.id)) return send(c, { t: 'atlas', op: 'gone', id: m.id });
+  if (op === 'get') return send(c, { t: 'atlas', op: 'entry', row: atlasEntry(t, p) });
+  if (op === 'like') { if (!setLike(t, p, !!m.on)) return send(c, { t: 'notice', kind: 'bad', text: 'You can’t like your own hub.' }); return send(c, { t: 'atlas', op: 'entry', row: atlasEntry(t, p) }); }
+  if (op === 'done') { if (t.id === p.id) return; const r = countDone(t, 'p:' + p.id, m.sec); if (r && r.sec > 5 && (!t.hub.best || r.sec < t.hub.best.sec)) { t.hub.best = { sec: r.sec, name: p.name, id: p.id }; markDirty(); } return send(c, { t: 'atlas', op: 'entry', row: atlasEntry(t, p), cleared: !!r }); }
+}
 function onMessage(c, raw) {
   let m; try { m = JSON.parse(raw); } catch (e) { return; } if (!m || typeof m.t !== 'string') return;
   if (m.t === 'hello') return onHello(c, m);
@@ -318,10 +427,24 @@ function onMessage(c, raw) {
       const d = clamp(m.d | 0, -100000, 100000); if (!d) return pushStars(p); if (d > 0) addStars(p, d, m.why, true); else if (addStars(p, d, m.why) < 0) pushStars(p, 'denied'); return;
     }
     case 'devgrant': if (DEV_GRANT) addStars(p, clamp(m.n | 0, 1, 5000), 'devgrant', false); return;
-    case 'hubpub': { if (limited(c, 'hubpub')) return; const sc = m.scenes; if (!Array.isArray(sc) || sc.length < 1 || sc.length > 6) return send(c, { t: 'notice', kind: 'bad', text: 'A hub needs 1–6 scenes.' }); const s = JSON.stringify(sc); if (s.length > 1500000) return send(c, { t: 'notice', kind: 'bad', text: 'Your hub is too large to publish.' }); p.hub = { public: !!m.public, scenes: sc, updated: now() }; markDirty(); return send(c, { t: 'hubpub', ok: true, public: p.hub.public }); }
-    case 'hubget': { const t = players.get(m.id); if (!t || !t.hub.scenes || !(t.hub.public || t.id === p.id || (c.party && parties.get(c.party) && parties.get(c.party).allowed.has('h:' + t.id)))) return send(c, { t: 'hubdata', id: m.id, err: 'private' }); return send(c, { t: 'hubdata', id: t.id, name: t.name, scenes: t.hub.scenes }); }
-    case 'save': { if (limited(c, 'sync')) return; const s = JSON.stringify(m.blob || null); if (s.length < 3e6) { p.save = { t: now(), blob: m.blob }; markDirty(); send(c, { t: 'saved', at: p.save.t }); } return; }
-    case 'loadsave': return send(c, { t: 'savedata', save: p.save });
+    case 'hubpub': { // publish / update the player's hub (all their dungeon scenes) + the Atlas preview shot
+      const sc = m.scenes; if (!Array.isArray(sc) || sc.length < 1 || sc.length > 6) return send(c, { t: 'notice', kind: 'bad', text: 'A hub needs 1–6 scenes.' });
+      if (JSON.stringify(sc).length > 1500000) return send(c, { t: 'notice', kind: 'bad', text: 'Your hub is too large to publish.' });
+      if (m.shot != null && !(typeof m.shot === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(m.shot) && m.shot.length < 400000)) m.shot = null;
+      c.hubPend = { scenes: sc, public: !!m.public, shot: m.shot || null };   // a burst of saves becomes one write: the latest wins
+      const wait = (COOL.hubpub * COOL_SCALE) - (now() - (c.hubAt || 0)); if (wait <= 0) applyHub(c); else if (!c.hubT) c.hubT = setTimeout(() => applyHub(c), wait); return; }
+    case 'hubvis': { const h = hubStats(p); if (!h.has) return send(c, { t: 'notice', kind: 'bad', text: 'Save your hub in the Dungeon Forge first.' }); h.public = !!m.public; h.chosen = true; markDirty(); return send(c, { t: 'hubpub', ok: true, public: h.public, vis: true }); }
+    case 'hubget': { const t = players.get(m.id); if (!t || !t.hub.has || !(t.hub.public || t.id === p.id || (c.party && parties.get(c.party) && parties.get(c.party).allowed.has('h:' + t.id)))) return send(c, { t: 'hubdata', id: m.id, err: 'private' });
+      const scenes = getBlob('hub', t.id); if (!scenes) return send(c, { t: 'hubdata', id: m.id, err: 'private' });
+      if (t.id !== p.id) countPlay(t, 'p:' + p.id);
+      return send(c, { t: 'hubdata', id: t.id, name: t.name, scenes }); }
+    case 'save': { // cloud save. Never dropped: a save that arrives too soon after the last one waits and is written moments later (the newest wins)
+      if (!m.blob || typeof m.blob !== 'object') return send(c, { t: 'saved', ok: false, why: 'empty' });
+      if (JSON.stringify(m.blob).length >= 3e6) return send(c, { t: 'saved', ok: false, why: 'big' });
+      c.savePend = m.blob; const wait = (COOL.sync * COOL_SCALE) - (now() - (c.saveAt || 0)); if (wait <= 0) applySave(c); else if (!c.saveT) c.saveT = setTimeout(() => applySave(c), wait); return; }
+    case 'loadsave': return send(c, { t: 'savedata', save: p.save && p.save.t ? getBlob('save', p.id) : null });
+    case 'setpw': { if (limited(c, 'setpw')) return; const pw = typeof m.pw === 'string' ? m.pw : ''; if (pw.length < PW_MIN || pw.length > 64) return send(c, { t: 'pwset', ok: false, text: `Passwords are ${PW_MIN}–64 characters.` }); p.pw = pwMake(pw); markDirty(); return send(c, { t: 'pwset', ok: true, text: 'Password set — you can now sign in as ' + p.name + ' on any device.' }); }
+    case 'atlas': { if (limited(c, 'atlas') && m.op !== 'done') return; return atlasOp(c, m); }
     case 'setname': return;
   }
 }
@@ -340,9 +463,10 @@ setInterval(() => { for (const c of online.values()) if (c.alive === false) { tr
 
 /* ---------------------------------------------------------------- HTTP (health + Wix webhook) */
 const server = http.createServer((req, res) => {
-  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type,x-signature' };
+  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type,x-signature,x-token', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
   if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
-  if (req.url === '/' || req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json', ...cors }); return res.end(JSON.stringify({ ok: true, game: 'neon-codex', online: online.size, rooms: rooms.size, players: players.size, guilds: guilds.size })); }
+  if (req.url === '/' || req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json', ...cors }); return res.end(JSON.stringify({ ok: true, game: 'neon-codex', online: online.size, rooms: rooms.size, players: players.size, guilds: guilds.size, hubs: [...players.values()].filter(p => p.hub && p.hub.has && p.hub.public).length, persistent: PERSISTENT, volume: !!VOLUME })); }
+  if (req.url.startsWith('/atlas')) return atlasHttp(req, res, cors);
   if (req.method === 'POST' && req.url === '/wix/credit') {
     let body = ''; req.on('data', d => { body += d; if (body.length > 20000) req.destroy(); });
     req.on('end', () => {
@@ -362,13 +486,40 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(404, cors); res.end('not found');
 });
+/* Atlas over plain HTTP: lets Campaign mode (no account needed) browse and play the hubs; likes need the multiplayer login token (x-token) */
+const httpHits = new Map();
+function atlasHttp(req, res, cors) {
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '';
+  const out = (code, o) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors }); res.end(JSON.stringify(o)); };
+  const hb = httpHits.get(ip) || { t: now(), n: 0 }; if (now() - hb.t > 60000) { hb.t = now(); hb.n = 0; } hb.n++; httpHits.set(ip, hb); if (httpHits.size > 5000) httpHits.clear();
+  const u = new URL(req.url, 'http://x'), parts = u.pathname.split('/').filter(Boolean); // ['atlas', kind, id]
+  const tok = req.headers['x-token'], viewer = typeof tok === 'string' && tok ? players.get(tokenIdx.get(sha(tok))) || null : null;
+  const pub = id => { const t = players.get(String(id || '').replace(/\.jpg$/, '')); return t && t.hub && t.hub.has && t.hub.public ? t : null; };
+  if (parts[1] === 'shot') { const t = pub(parts[2]), img = t && getBlob('shot', t.id); if (!img) { res.writeHead(404, cors); return res.end(); } res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=600', ...cors }); return res.end(img); }
+  if (hb.n > 120) return out(429, { ok: false, error: 'slow down' });
+  if (req.method === 'GET' && parts.length === 1) return out(200, { ok: true, ...atlasList(viewer, u.searchParams.get('sort'), u.searchParams.get('q'), +u.searchParams.get('page') || 0) });
+  const t = pub(parts[2]); if (!t) return out(404, { ok: false, error: 'not found' });
+  if (req.method === 'GET' && parts[1] === 'entry') return out(200, { ok: true, row: atlasEntry(t, viewer) });
+  if (req.method === 'GET' && parts[1] === 'hub') { const scenes = getBlob('hub', t.id); if (!scenes) return out(404, { ok: false }); if (!viewer || viewer.id !== t.id) countPlay(t, viewer ? 'p:' + viewer.id : 'i:' + ip); return out(200, { ok: true, id: t.id, name: t.name, scenes }); }
+  if (req.method === 'POST' && (parts[1] === 'like' || parts[1] === 'done')) {
+    let body = ''; req.on('data', d => { body += d; if (body.length > 2000) req.destroy(); });
+    req.on('end', () => { let j = {}; try { j = JSON.parse(body || '{}'); } catch (e) { }
+      if (parts[1] === 'like') { if (!viewer) return out(401, { ok: false, error: 'Sign in to Multiplayer once to like hubs.' }); if (!setLike(t, viewer, !!j.on)) return out(400, { ok: false, error: 'You can’t like your own hub.' }); return out(200, { ok: true, row: atlasEntry(t, viewer) }); }
+      if (viewer && viewer.id === t.id) return out(200, { ok: true, row: atlasEntry(t, viewer) });
+      const r = countDone(t, viewer ? 'p:' + viewer.id : 'i:' + ip, j.sec); if (r && r.sec > 5 && (!t.hub.best || r.sec < t.hub.best.sec)) { t.hub.best = { sec: r.sec, name: viewer ? viewer.name : cleanText(j.name, 16) || 'A campaign champion', id: viewer ? viewer.id : null }; markDirty(); }
+      return out(200, { ok: true, cleared: !!r, row: atlasEntry(t, viewer) }); });
+    return;
+  }
+  return out(404, { ok: false });
+}
 const wss = new WebSocketServer({ server, maxPayload: 2 * 1024 * 1024, verifyClient: (info, cb) => { if (!ORIGINS.length) return cb(true); const o = info.origin || ''; cb(ORIGINS.some(x => o === x || o.startsWith(x)), 403, 'origin not allowed'); } });
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => { ws._req = req;
   const c = { ws, alive: true, p: null, id: null, room: null, party: null, x: 0, y: 0, z: 0, f: 0, s: 0, a: 0, scene: null };
-  const key = ws._socket && ws._socket.remoteAddress; ws.on('pong', () => { c.alive = true; });
+  c.ip = (ws._req && ws._req.headers && String(ws._req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || (ws._socket && ws._socket.remoteAddress) || ''; ws.on('pong', () => { c.alive = true; });
   let cnt = 0, t0 = now(); ws.on('message', d => { const t = now(); if (t - t0 > 1000) { t0 = t; cnt = 0; } if (++cnt > 80) return; try { onMessage(c, d.toString()); } catch (e) { console.error('msg error', e.message); } });
   ws.on('close', () => dropConn(c)); ws.on('error', () => { });
   setTimeout(() => { if (!c.p) { try { ws.close(); } catch (e) { } } }, 15000);
 });
+setInterval(backup, 3600000); setTimeout(backup, 60000);
 server.listen(PORT, () => console.log(`Neon Codex Massive server on :${PORT} · data in ${DATA_DIR} · wix=${SECRET ? 'on' : 'off'} · origins=${ORIGINS.join(',') || '*'}`));
-module.exports = { server, wss, players, guilds, hmac };
+module.exports = { server, wss, players, guilds, hmac, flush, PERSISTENT };

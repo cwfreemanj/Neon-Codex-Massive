@@ -6494,7 +6494,7 @@ let tries=0,rt=null,rtOn=false,name=null,wantName=null,closing=false;O.offlineCh
 O.start=function(){if(!O.mp()||O.on)return;O.on=true;
  if(!O.url()){O.status='noserver';O.emit('status');return}
  const a=acct();if(a&&a.token){name=a.name;connect()}else if(O.wix&&O.wix.id){connect()}else O.emit('needname')};
-O.signIn=function(n){wantName=n;name=n;if(!O.ws||O.ws.readyState>1)connect();else hello()};
+O.signIn=function(n,pw){wantName=n;name=n;O._pw=pw||'';if(pw){const a=acct();if(a&&a.token&&(a.name||'').toLowerCase()!==String(n).toLowerCase())setAcct(null)}if(!O.ws||O.ws.readyState>1)connect();else hello()};
 /* v15: always end up in the shared server — never sit offline waiting for a page refresh.
    ensure(true) = the player asked (e.g. pressed E on a guild-hub door); ensure() = background watchdog. */
 O.waiting=()=>O.mp()&&!!O.url()&&!O.authed&&!O.offlineChoice&&tries<3;
@@ -6510,7 +6510,7 @@ function connect(){clearTimeout(rt);rtOn=false;O.offlineChoice=false;const u=O.u
  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch(e){return}onMsg(m)};
  ws.onclose=()=>{O.authed=false;O.host=null;O.emit('host',{id:null});clearRemotes();if(O.ws===ws)O.ws=null;if(closing)return;O.status=O.err?'denied':'offline';O.emit('status');if(O.err==='kicked')return;tries++;rtOn=true;rt=setTimeout(connect,Math.min(15000,1000*Math.pow(1.7,tries)))};
  ws.onerror=()=>{}}
-function hello(){const a=acct();const m={t:'hello',name:(a&&a.name)||name||wantName||'',hero:Hero.key,pal:myPal(),pr:typeof PRES!=='undefined'?PRES.of(Hero.key):0};if(a&&a.token)m.token=a.token;if(O.recovering)m.recover=true;if(O.wix&&O.wix.id)m.wix=O.wix;O.send(m)}
+function hello(){const a=acct();const m={t:'hello',name:(a&&a.name)||name||wantName||'',hero:Hero.key,pal:myPal(),pr:typeof PRES!=='undefined'?PRES.of(Hero.key):0};if(a&&a.token)m.token=a.token;if(O.recovering)m.recover=true;if(O._pw){m.pw=O._pw;m.newpw=O._pw}if(O.wix&&O.wix.id)m.wix=O.wix;O.send(m)}
 O.relogin=hello;
 /* ---------------- stars: the server holds the real balance in multiplayer ---------------- */
 if(O.mp()){let raw=PROG._stars|0;delete PROG._stars;let silent=false;
@@ -6518,7 +6518,7 @@ if(O.mp()){let raw=PROG._stars|0;delete PROG._stars;let silent=false;
  O.setStars=v=>{silent=true;raw=Math.max(0,v|0);silent=false;try{updateHud();ECON.sync(true)}catch(e){}}}else O.setStars=()=>{};
 /* ---------------- incoming ---------------- */
 function onMsg(m){switch(m.t){
- case'welcome':O.authed=true;O.err='';O.me={id:m.id,name:m.name};O.profile=m.profile;O.quests=m.quests;O.guild=m.guild;O.invites=[];O.icons=m.icons||O.icons;O.caps=m.caps||{};O.devGrant=m.devGrant;O.lvTable=m.lvTable;O.wixLinked=m.wix;O.recovering=false;
+ case'welcome':O.authed=true;O.err='';O.me={id:m.id,name:m.name};O.profile=m.profile;O.quests=m.quests;O.guild=m.guild;O.invites=[];O.icons=m.icons||O.icons;O.caps=m.caps||{};O.devGrant=m.devGrant;O.lvTable=m.lvTable;O.wixLinked=m.wix;O.hasPw=!!m.hasPw;O._pw='';O.recovering=false;
   if(m.token)setAcct({name:m.name,token:m.token});else{const a=acct();if(!a||a.name!==m.name)setAcct({name:m.name,token:a&&a.token})}
   O.setStars(m.stars);perks();O.status='online';O.emit('status');O.emit('welcome',m);
   for(const i of m.invites||[])O.emit('invite',{kind:'guild',from:i.from,fromName:i.from,guild:i.guild,guildName:i.name});
@@ -6544,7 +6544,7 @@ function onMsg(m){switch(m.t){
  case'invite':O.invites.push(Object.assign({t:Date.now()},m));O.emit('invite',m);break;
  case'ready':case'ready_state':case'ready_end':case'go':O.emit(m.t,m);break;
  case'guild':O.guild=m.guild;perks();if(m.why)toast(esc(m.why));O.emit('guild',m);break;
- case'guilds':case'lb':case'profile':case'hubdata':case'hubpub':case'savedata':case'saved':O.emit(m.t,m);break;
+ case'guilds':case'lb':case'profile':case'hubdata':case'hubpub':case'savedata':case'saved':case'atlas':case'pwset':O.emit(m.t,m);break;
  case'presence':break;
 }}
 function perks(){const L=O.guild?O.guild.perks:null;O.perks=L||{xp:0,star:0,hp:0,pm:0,cap:10}}
@@ -6659,7 +6659,7 @@ function cloudBlob(){const b={};for(const k of KEYS){const v=ls(k);if(v)b[k]=v}i
  const size=()=>{let n=0;for(const k in b)n+=b[k].length;return n};for(const k of['nca_designs_v1','nca_studio_v3']){if(size()<1.6e6)break;delete b[k]}return b}
 O.cloudPush=function(force){if(!O.authed||O.hold)return false;try{const b=cloudBlob();if(!b)return false;const sig=Object.keys(b).map(k=>k+':'+b[k].length+':'+hashStr(b[k])).join('|');
  if(!force&&sig===O.lastSig&&Date.now()-(O.lastPushT||0)<600000){O.dirtySave=false;return true}
- O.pendingSig=sig;O.dirtySave=false;O.send({t:'save',blob:b});return true}catch(e){return false}};
+ O.pendingSig=sig;O.dirtySave=false;O.send({t:'save',blob:b});clearTimeout(O._ackT);O._ackT=setTimeout(()=>{if(O.lastSig!==O.pendingSig){O.dirtySave=true;if(O.schedulePush)O.schedulePush()}},12000);return true}catch(e){return false}};
 function hashStr(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return h>>>0}
 O.on_('saved',m=>{if(m.ok===false){if(m.why!=='empty')O.dirtySave=true;O.emit('cloudsaved',m);return}ls('nca_cloud_t',String(m.at));O.lastSig=O.pendingSig;O.lastPushT=Date.now();O.emit('cloudsaved',m)});
 /* login on this device: decide whether the account's cloud save or this device's progress wins */
@@ -6703,7 +6703,7 @@ O.publishHub=function(pub,cb){if(!O.authed)return toast('Publishing needs a serv
  try{if(typeof BLD!=='undefined'&&S&&S.mine&&!S.visit&&typeof saveTerrain==='function'&&RT.terr)saveTerrain()}catch(e){}
  const sc=BLD.mineList().map(s=>JSON.parse(JSON.stringify(s)));if(!sc.length)return toast('Build something first','bad');
  const keep=(pub===null||pub===undefined)?(O.profile&&O.profile.hubPublic):pub;
- O._pubcb=cb;O.send({t:'hubpub',public:!!keep,scenes:sc})};
+ O._pubcb=cb;O.send({t:'hubpub',public:!!keep,scenes:sc,shot:(typeof ATLAS!=='undefined'&&ATLAS.shot)?ATLAS.shot():null})};
 O.on_('hubpub',m=>{if(O.profile)O.profile.hubPublic=m.public;const f=O._pubcb;O._pubcb=null;if(f)f();else toast(m.public?'Your hub is <b>public</b> — anyone can visit it from your profile':'Hub saved on the server (private)','done')});
 /* ---------------- visiting another player's hub ---------------- */
 O.visiting=null;
@@ -6892,13 +6892,13 @@ function renderSoc(){if(!O.isOpen('socp'))return;const b=soc.querySelector('.nb'
   else{h=`<p class="mu">Party of ${pt.members.length}/${pt.max||8}. ${pt.leader===me?'You are the <b>leader</b> — use a chapter portal to start a Ready Up.':'Only the leader picks the destination.'}</p>`+pt.members.map(m=>`<div class="li"><span class="dot ${m.online?'on':''}"></span><b>${pt.leader===m.id?'👑 ':''}${esc(m.name)}</b><small>Lv ${m.lv} ${esc(KN(m.hero))}</small><span class="sp"></span><button class="pb sm ghost" data-fa="prof" data-id="${m.id}">Profile</button>${pt.leader===me&&m.id!==me?`<button class="pb sm ghost" data-fa="promote" data-id="${m.id}">👑</button><button class="pb sm ghost" data-fa="kick" data-id="${m.id}">Kick</button>`:''}</div>`).join('')+'<div class="row" style="margin-top:8px"><button class="pb sm ghost" data-fa="leave">Leave party</button></div>'}}
  else{const list=[...NET.remote.values()].sort((a,b)=>a.d-b.d);h=list.length?list.map(r=>`<div class="li"><b>${r.a.tag?'['+esc(r.a.tag)+'] ':''}${esc(r.a.name)}</b><small>Lv ${r.a.lv||1} ${esc(KN(r.a.hero))}</small><span class="sp"></span><button class="pb sm ghost" data-fa="prof" data-id="${r.id}">Profile</button></div>`).join(''):'<p class="mu">Nobody else is in this area right now.</p>'}
  const a=NET.acct();
- b.innerHTML=`<div class="tabs2">${tabs}</div>${h}<h4>Account</h4><div class="row"><span class="mu">Signed in as <b>${esc(NET.me.name)}</b>${NET.wixLinked?' · linked to your site account':''}</span><span class="sp"></span><button class="pb sm ghost" data-fa="cloud">☁ Save now</button><button class="pb sm ghost" data-fa="key">🔑 Recovery key</button><button class="pb sm ghost" data-fa="out">Switch account</button></div><div class="mu" style="font-size:12px;margin-top:4px">${cloudLine()}</div>`}
-function cloudLine(){let t=0;try{t=+localStorage.getItem('nca_cloud_t')||0}catch(e){}return t?'☁ Progress (levels, prestige, champions, codex, build hub) last backed up to your account '+new Date(t).toLocaleString()+'. It saves automatically as you play.':'☁ Your progress backs up to your account automatically as you play.'}
+ b.innerHTML=`<div class="tabs2">${tabs}</div>${h}<h4>Account</h4><div class="row"><span class="mu">Signed in as <b>${esc(NET.me.name)}</b>${NET.wixLinked?' · linked to your site account':''}</span><span class="sp"></span><button class="pb sm ghost" data-fa="cloud">☁ Save now</button><button class="pb sm ghost" data-fa="pw">${NET.hasPw?'🔒 Change password':'🔒 Set password'}</button><button class="pb sm ghost" data-fa="key">🔑 Recovery key</button><button class="pb sm ghost" data-fa="out">Switch account</button></div><div class="mu" style="font-size:12px;margin-top:4px">${cloudLine()}</div>`}
+function cloudLine(){let t=0;try{t=+localStorage.getItem('nca_cloud_t')||0}catch(e){}return (t?'☁ Progress (levels, prestige, champions, codex, build hub) last backed up to your account '+new Date(t).toLocaleString()+'. It saves automatically as you play.':'☁ Your progress backs up to your account automatically as you play.')+(NET.hasPw?' · 🔒 Password set — sign in on any device with your name + password.':' · <b style="color:var(--go)">Set a password</b> to sign in on your phone, tablet or another browser.')}
 soc.addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t){stab=t.dataset.t;renderSoc();return}const a=e.target.closest('[data-fa]');if(!a)return;const id=a.dataset.id,k=a.dataset.fa;
  if(k==='accept'||k==='decline')NET.send({t:'friend',op:k,id});else if(k==='prof')O.profile(id);else if(k==='w'){O.close('socp');openChat('/w '+a.dataset.n.replace(/ /g,'_')+' ')}else if(k==='inv'){NET.send({t:'party',op:'invite',id});a.disabled=true}
  else if(k==='rm')NET.send({t:'friend',op:'remove',id});else if(k==='kick')NET.send({t:'party',op:'kick',id});else if(k==='promote')NET.send({t:'party',op:'promote',id});else if(k==='leave')NET.send({t:'party',op:'leave'});
  else if(k==='cloud'){NET.dirtySave=true;if(NET.cloudPush(true))toast('Saving to your account…','done');else toast('Could not save – no server connection','bad')}
- else if(k==='key')keyDialog(false);
+ else if(k==='pw')pwDialog();else if(k==='key')keyDialog(false);
  else if(k==='out')keyDialog(true)});
 NET.on_('cloudsaved',m=>{if(m.ok===false){if(m.why==='big')toast('Save is too large for the server','bad');return}try{if(O.isOpen('socp'))renderSoc()}catch(e){}});
 for(const t of['friends','party','guild'])NET.on_(t,()=>renderSoc());NET.on_('room',()=>renderSoc());
@@ -6933,12 +6933,18 @@ const rdyEnd=why=>{clearInterval(rdyT);rdyData=null;O.close('rdy');if(why)toast(
 NET.on_('ready_end',m=>rdyEnd(m.reason));NET.on_('go',()=>rdyEnd(''));
 
 /* ---------------- sign-in / cloud dialogs ---------------- */
-function nameDialog(err){const b=nameq.querySelector('.nb');b.innerHTML=`<h2>CHOOSE YOUR NAME</h2><p class="mu">This is how other champions see you in the shared hub. Your browser keeps a secret key so only you can sign in as this name.</p><input class="tin" id="nq-n" maxlength="16" placeholder="3–16 letters or numbers" value="${esc(NET.acct()&&NET.acct().name||'Champion'+(1000+Math.floor(Math.random()*9000)))}"><div class="er" id="nq-e">${esc(err||'')}</div><div class="row" style="justify-content:center"><button class="pb" id="nq-go">Enter the hub</button><button class="pb ghost" id="nq-off" style="${NET.url()?'display:none':''}">Play offline</button></div><div style="text-align:center;margin-top:10px"><button class="lnk" id="nq-key" style="background:none;border:0;color:var(--cy);text-decoration:underline;cursor:pointer;font:600 12px var(--f)">Already have an account? Sign in with your recovery key</button></div>`;
- O.open('nameq');const inp=$$('nq-n');setTimeout(()=>inp.focus(),30);const go=()=>{const v=inp.value.trim();if(v.length<3){$$('nq-e').textContent='At least 3 characters.';return}$$('nq-e').textContent='Connecting…';NET.signIn(v)};
- $$('nq-go').onclick=go;$$('nq-key').onclick=()=>keyEntry();inp.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('nq-off').onclick=()=>{NET.offlineChoice=true;O.close('nameq');NET.status='offline';chipUp()};if(NET.url())inp.select()}
-NET.on_('needname',()=>{if(!O.isOpen('nameq'))nameDialog()});NET.on_('status',()=>{const b=document.getElementById('nq-off');if(b&&O.isOpen('nameq')&&NET.status==='offline'){b.style.display='';b.textContent='Server unreachable — play offline for now'}});NET.on_('denied',m=>{if(m.rk)keyEntry(m.text);else nameDialog(m.text)});NET.on_('welcome',()=>O.close('nameq'));
+function nameDialog(err,m){m=m||{};const taken=m.code==='taken'||m.code==='badpw'||m.code==='slow';const b=nameq.querySelector('.nb');const nm=taken&&m.name?m.name:(NET.acct()&&NET.acct().name||'Champion'+(1000+Math.floor(Math.random()*9000)));
+ b.innerHTML=`<h2>${taken?'SIGN IN':'CHOOSE YOUR NAME'}</h2><p class="mu">${taken?(m.hasPw?'Enter the password of <b>'+esc(m.name||'')+'</b> to sign in on this device — your levels, prestige, champions and codex come with it.':'<b>'+esc(m.name||'')+'</b> has no password yet. If it is yours, sign in with its recovery key (below), then set a password in Social → Account. Otherwise pick another name.'):'This is how other champions see you in the shared hub. Played before on another device? Enter that name and its password.'}</p><input class="tin" id="nq-n" maxlength="16" placeholder="3–16 letters or numbers" value="${esc(nm)}" autocomplete="username"><input class="tin" id="nq-p" type="password" maxlength="64" placeholder="${taken?'Password':'Password (optional · lets you sign in on any device)'}" autocomplete="${taken?'current-password':'new-password'}" style="margin-top:8px"><div class="er" id="nq-e">${esc(err||'')}</div><div class="row" style="justify-content:center"><button class="pb" id="nq-go">${taken?'Sign in':'Enter the hub'}</button><button class="pb ghost" id="nq-off" style="${NET.url()?'display:none':''}">Play offline</button></div><div style="text-align:center;margin-top:10px"><button class="lnk" id="nq-key" style="background:none;border:0;color:var(--cy);text-decoration:underline;cursor:pointer;font:600 12px var(--f)">Have a recovery key instead? Sign in with it</button></div>`;
+ O.open('nameq');const inp=$$('nq-n'),pin=$$('nq-p');setTimeout(()=>{(taken?pin:inp).focus()},30);const go=()=>{const v=inp.value.trim(),pw=pin.value;if(v.length<3){$$('nq-e').textContent='At least 3 characters.';return}if(pw&&pw.length<6){$$('nq-e').textContent='Passwords are at least 6 characters.';return}$$('nq-e').textContent='Connecting…';NET.signIn(v,pw)};
+ $$('nq-go').onclick=go;$$('nq-key').onclick=()=>keyEntry();for(const i of[inp,pin])i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('nq-off').onclick=()=>{NET.offlineChoice=true;O.close('nameq');NET.status='offline';chipUp()};if(NET.url()&&!taken)inp.select()}
+NET.on_('needname',()=>{if(!O.isOpen('nameq'))nameDialog()});NET.on_('status',()=>{const b=document.getElementById('nq-off');if(b&&O.isOpen('nameq')&&NET.status==='offline'){b.style.display='';b.textContent='Server unreachable — play offline for now'}});NET.on_('denied',m=>{if(m.rk)keyEntry(m.text);else nameDialog(m.text,m)});NET.on_('welcome',()=>O.close('nameq'));
 function keyEntry(err){const b=nameq.querySelector('.nb');b.innerHTML=`<h2>SIGN IN WITH RECOVERY KEY</h2><p class="mu">Paste the recovery key from <b>Social → Account → 🔑 Recovery key</b> on the device you played on. Your levels, prestige, champions and codex come back with it.</p><input class="tin" id="rk-i" placeholder="paste recovery key" autocomplete="off" spellcheck="false"><div class="er" id="rk-e">${esc(err||'')}</div><div class="row" style="justify-content:center"><button class="pb" id="rk-go">Sign in</button><button class="pb ghost" id="rk-back">Back</button></div>`;O.open('nameq');const i=$$('rk-i');setTimeout(()=>i.focus(),30);
  const go=()=>{if(!NET.signInKey(i.value))$$('rk-e').textContent='That does not look like a recovery key.';else $$('rk-e').textContent='Connecting…'};$$('rk-go').onclick=go;i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('rk-back').onclick=()=>nameDialog()}
+function pwDialog(){const b=nameq.querySelector('.nb');b.innerHTML=`<h2>${NET.hasPw?'CHANGE PASSWORD':'SET A PASSWORD'}</h2><p>With a password you can sign in as <b>${esc(NET.me.name)}</b> on any device or browser — phone, tablet or another computer — using your name and password. Your levels, prestige, champions and codex follow you.</p><input class="tin" id="pw-a" type="password" maxlength="64" placeholder="New password (6+ characters)" autocomplete="new-password"><input class="tin" id="pw-b" type="password" maxlength="64" placeholder="Repeat it" autocomplete="new-password" style="margin-top:8px"><div class="er" id="pw-e"></div><div class="row" style="justify-content:center"><button class="pb" id="pw-go">Save password</button><button class="pb ghost" id="pw-x">Cancel</button></div>`;O.open('nameq');
+ const a=$$('pw-a'),c=$$('pw-b');setTimeout(()=>a.focus(),30);const go=()=>{if(a.value.length<6){$$('pw-e').textContent='At least 6 characters.';return}if(a.value!==c.value){$$('pw-e').textContent='The two passwords don’t match.';return}$$('pw-e').textContent='Saving…';NET.send({t:'setpw',pw:a.value})};
+ $$('pw-go').onclick=go;for(const i of[a,c])i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('pw-x').onclick=()=>O.close('nameq')}
+NET.on_('pwset',m=>{if(m.ok){NET.hasPw=true;if(O.isOpen('nameq'))O.close('nameq');toast(esc(m.text),'done');try{renderSoc()}catch(e){}}else{const e=document.getElementById('pw-e');if(e)e.textContent=m.text;else toast(esc(m.text),'bad')}});
+NET.on_('welcome',m=>{if(m.hasPw)return;let k='nca_pw_tip_'+m.id;try{if(localStorage.getItem(k))return;localStorage.setItem(k,'1')}catch(e){}setTimeout(()=>{if(!NET.hasPw)toast('🔒 <b>Tip:</b> set a password in <b>Social → Account</b> so you can sign in on your phone, tablet or another browser and keep all your progress.','done')},25000)});
 function keyDialog(out){const k=NET.recoveryKey();const b=nameq.querySelector('.nb');b.innerHTML=`<h2>${out?'SWITCH ACCOUNT':'RECOVERY KEY'}</h2><p>${out?'Before you switch, <b>save this key</b>. It is the only way to sign back in to <b>'+esc(NET.me.name)+'</b> from another browser or after clearing site data.':'Keep this key somewhere safe. Anyone with it can sign in as you; with it you can get back into this account from any browser or device.'}</p><input class="tin" id="rk-v" readonly value="${esc(k)}" style="font-size:12px"><div class="row" style="justify-content:center;margin-top:10px"><button class="pb" id="rk-cp">Copy key</button>${out?'<button class="pb ghost" id="rk-sw">I saved it – switch</button>':''}<button class="pb ghost" id="rk-x">Close</button></div>`;O.open('nameq');
  $$('rk-cp').onclick=()=>{const v=$$('rk-v');v.select();let ok=false;try{navigator.clipboard.writeText(k);ok=true}catch(e){}try{ok=document.execCommand('copy')||ok}catch(e){}toast(ok?'Recovery key copied':'Select the key and copy it','done')};$$('rk-x').onclick=()=>O.close('nameq');
  if(out)$$('rk-sw').onclick=()=>{try{localStorage.removeItem('nca_acct')}catch(er){}location.reload()}}
@@ -7943,6 +7949,294 @@ function flush(dt){if(O.rs==='guest'&&O.hits.length){const hs=O.hits.splice(0,40
 O.dump=()=>({rs:O.rs,pup:O.pup.size,byCn:O.byCn.size,peers:O.pc.length,seq:O.seq,got:O.got,stat:O.stat});
 return O})();
 
+</script>
+<script id="nca-atlas">
+/* ============ ATLAS · the Hub Atlas — a showcase of every player's published hub (Campaign + Multiplayer) ============
+   * A domed observatory on the south lawn of the central hub (added to existing saves automatically). Walk up and interact.
+   * The Atlas menu lists every public player hub saved on the server: a sky-view shot, the owner, the monsters inside,
+     the objectives, plays, likes, full clears, best / average clear time, how many players are exploring it right now.
+   * ▶ Play loads the hub straight from the menu. ♥ Like (one per account). A clear (every objective scene in the hub
+     completed in one visit) is reported to the server and counted once per player per few hours.
+   * Multiplayer: pressing 💾 Save in the Dungeon Forge also publishes the hub (with a fresh sky-view shot) to the Atlas;
+     "My hub" lets the owner unlist / relist it. Campaign: browse + play over plain HTTP, likes use the multiplayer login if
+     this browser has one. All stats are kept by the server (server.js · Hub Atlas). */
+const ATLAS=(()=>{
+const O={run:null};
+const MP=()=>typeof NET!=='undefined'&&NET.mp();
+const WS=()=>MP()&&NET.authed;
+const base=()=>{try{return NET.httpUrl()||''}catch(e){return ''}};
+const E=s=>typeof esc==='function'?esc(String(s==null?'':s)):String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>(n|0).toLocaleString('en-US');
+const mmss=s=>{s=s|0;return s>=3600?Math.floor(s/3600)+'h '+String(Math.floor(s%3600/60)).padStart(2,'0')+'m':Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const ago=t=>{if(!t)return '—';const d=(Date.now()-t)/1000;if(d<60)return 'just now';if(d<3600)return Math.floor(d/60)+' min ago';if(d<86400)return Math.floor(d/3600)+' h ago';if(d<86400*30)return Math.floor(d/86400)+' days ago';return new Date(t).toLocaleDateString()};
+const token=()=>{try{if(MP()){const a=NET.acct();return a&&a.token||''}const j=JSON.parse(localStorage.getItem('nca_acct__mp')||'null');return j&&j.token||''}catch(e){return ''}};
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}};
+
+/* ===================================================================== the building ===================================================================== */
+function makeAtlas(M){const{B,Bx,Cy,Co,Sp,Tr,halo,sign,lightAt}=HUB.prim;const g=new THREE.Group(),glow=M.p.glow;
+ g.add(B(Cy(5.5,5.8,.5,28),M.stone,0,.25,0),B(Cy(4.95,5.15,.42,28),M.trim,0,.71,0),B(Cy(4.7,4.7,.1,28),M.dark,0,.95,0));
+ g.add(B(Bx(3.2,.25,1.4),M.stone,0,.125,5.75),B(Bx(2.6,.25,1.0),M.stone,0,.375,5.35),B(Bx(2.2,.22,.7),M.stone,0,.6,5.05));
+ for(let i=0;i<8;i++){const a=i/8*Math.PI*2+Math.PI/8,x=Math.sin(a)*4.15,z=Math.cos(a)*4.15;
+  g.add(B(Bx(.95,.32,.95),M.stone,x,1.12,z),B(Cy(.3,.36,4.5,8),M.wall,x,3.5,z),B(Bx(.9,.28,.9),M.gold,x,5.86,z),B(Cy(.33,.33,.1,8),M.gold,x,1.4,z))}
+ g.add(B(Tr(4.18,.3,6,40),M.trim,0,6.08,0,Math.PI/2),B(Tr(4.18,.12,5,40),M.gold,0,6.32,0,Math.PI/2));
+ for(let i=0;i<4;i++)g.add(B(Tr(4.18,.1,4,30,Math.PI),M.gold,0,6.1,0,0,i*Math.PI/4,0));
+ g.add(B(Sp(.5,10),M.gold,0,10.35,0),B(Co(.24,1.1,6),M.gold,0,11.15,0));const st=halo(glow,2.2,0,11.8,0,.7);st.userData.anim=(o,t)=>{o.material.opacity=.5+.25*Math.sin(t*2.2)};g.add(st);
+ g.add(B(Cy(.85,1.15,1.5,10),M.stone,0,1.75,0),B(Cy(1.2,1.2,.16,14),M.gold,0,2.55,0),B(Cy(1.05,1.05,.06,14),M.dark,0,2.64,0));
+ const holo=new THREE.Group();holo.position.y=4.15;
+ const core=new THREE.Mesh(new THREE.SphereGeometry(1.15,18,12),new THREE.MeshStandardMaterial({color:0x10204a,emissive:glow,emissiveIntensity:.35,roughness:.3,metalness:.2,transparent:true,opacity:.85,flatShading:true}));
+ const wire=new THREE.Mesh(new THREE.SphereGeometry(1.24,16,10),new THREE.MeshBasicMaterial({color:glow,wireframe:true,transparent:true,opacity:.5}));wire.userData.noOutline=1;holo.add(core,wire);
+ const orb=new THREE.Group();const iso=[[2.3,.2,0],[2.1,-.35,1.3],[2.4,.45,2.5],[2.2,-.1,3.8],[2.5,.3,5.1]];
+ for(const[r,y,a]of iso){const k=new THREE.Group();k.position.set(Math.cos(a)*r,y,Math.sin(a)*r);
+  k.add(B(Cy(.34,.18,.22,6),M.rock||M.stone,0,0,0),B(Cy(.3,.3,.04,6),M.moss||M.trim,0,.12,0),B(Bx(.12,.3,.12),M.wall,.06,.28,.02),B(Co(.1,.14,4),M.roof,.06,.5,.02));orb.add(k)}
+ holo.add(orb);const ring=new THREE.Mesh(new THREE.TorusGeometry(1.75,.025,4,48),new THREE.MeshBasicMaterial({color:glow,transparent:true,opacity:.6}));ring.rotation.x=Math.PI/2.2;ring.userData.noOutline=1;holo.add(ring);
+ holo.userData.anim=(o,t)=>{o.position.y=4.15+Math.sin(t*1.25)*.12;core.rotation.y=t*.3;wire.rotation.y=-t*.18;orb.rotation.y=t*.42;ring.rotation.z=t*.25};
+ g.add(holo,halo(glow,5.5,0,4.15,0,.32));const beam=new THREE.Mesh(new THREE.CylinderGeometry(.55,1.0,1.4,16,1,true),new THREE.MeshBasicMaterial({color:glow,transparent:true,opacity:.18,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));beam.position.y=3.35;beam.userData.noOutline=1;g.add(beam);
+ try{lightAt(g,glow,2.4,12)}catch(e){}
+ g.add(sign(M,'HUB ATLAS',0,1.95,3.95,2.6));
+ for(const sx of[-1,1]){g.add(B(Cy(.16,.22,1.6,6),M.dark,sx*2.1,.8,6.1),B(Cy(.3,.2,.26,8),M.gold,sx*2.1,1.68,6.1));const f=halo(0x8ad8ff,1.6,sx*2.1,1.95,6.1,.85);f.userData.anim=(o,t)=>{o.material.opacity=.6+.25*Math.sin(t*3+sx)};g.add(f)}
+ try{g.add(HUB.emitter('runes',{x:0,y:3.2,z:0,box:[2.6,1.6,2.6],h:3,n:14,seed:41}))}catch(e){}
+ return g}
+const col=[['c',0,0,5.7,.5],['c',0,0,5.05,.95],['b',0,5.75,3.2,1.4,.25,0,0],['b',0,5.35,2.6,1.0,.5,0,0],['b',0,5.05,2.2,.7,.72,0,0],['c',0,0,1.2,2.7]];
+for(let i=0;i<8;i++){const a=i/8*Math.PI*2+Math.PI/8;col.push(['c',Math.sin(a)*4.15,Math.cos(a)*4.15,.5,6.2])}
+try{HUB.def('atlas','Town','Hub Atlas','Browse, like and play the hubs other players have built and published. Each one shows a sky-view preview, its monsters, objectives and stats.',makeAtlas,{col,ds:1})}catch(e){console.error('atlas model',e)}
+
+/* ---- placed on the south lawn of the central hub, facing the plaza; existing saves get it once (hub.atlasV) ---- */
+const AT={x:17,z:33,r:12,flat:7.2};
+const DECOR=new Set(['tree','oak','bigpine','dead','bush','fbush','fern','tuft','flowers','mush','stump','log','boulder','rocks','reeds','stones','crates','barrels','grass']);
+O.migrate=function(){const hub=DB.scenes&&DB.scenes.hub;if(!hub||!hub.h||hub.atlasV===1)return false;
+ if(!hub.objs.some(o=>o.k==='atlas')){const w=hub.w,d=hub.d,vx=w+1,hs=[];
+  for(let j=0;j<=d;j++)for(let i=0;i<=w;i++){const x=i-w/2,z=j-d/2;if(Math.hypot(x-AT.x,z-AT.z)<=AT.flat)hs.push(hub.h[j*vx+i]|0)}
+  hs.sort((a,b)=>a-b);const tgt=hs.length?hs[hs.length>>1]:0;
+  for(let j=0;j<=d;j++)for(let i=0;i<=w;i++){const x=i-w/2,z=j-d/2,dd=Math.hypot(x-AT.x,z-AT.z);if(dd>=AT.r)continue;const t=dd<=AT.flat?1:1-(dd-AT.flat)/(AT.r-AT.flat),sm=t*t*(3-2*t),k=j*vx+i;hub.h[k]=Math.round((hub.h[k]|0)+(tgt-(hub.h[k]|0))*sm)}
+  hub.objs=hub.objs.filter(o=>!(DECOR.has(o.k)&&Math.hypot(o.x-AT.x,o.z-AT.z)<AT.r+1));
+  const face=(x,z)=>Math.atan2(-x,-z),r=face(AT.x,AT.z);hub.objs.push(newObj('atlas',AT.x,AT.z,{r}));
+  const ux=-AT.x/Math.hypot(AT.x,AT.z),uz=-AT.z/Math.hypot(AT.x,AT.z),px=-uz,pz=ux,add=(k,x,z,o)=>hub.objs.push(newObj(k,x,z,o||{}));
+  for(const t of[8.4,11.6])for(const s of[-1,1])add('lamp',AT.x+ux*t+px*2.6*s,AT.z+uz*t+pz*2.6*s,{r});
+  add('signpost',AT.x+ux*13.5+px*3.6,AT.z+uz*13.5+pz*3.6,{r:r+.5});
+  for(const s of[-1,1])add('fbush',AT.x+px*7.2*s-ux*1.5,AT.z+pz*7.2*s-uz*1.5)}
+ hub.atlasV=1;try{persist()}catch(e){}return true};
+{const _ec=ensureChapters;ensureChapters=function(){const r=_ec.apply(this,arguments);try{O.migrate()}catch(e){console.error('atlas place',e)}return r}}
+{const _si=storyInteract;storyInteract=function(cand){_si.apply(this,arguments);if(!S||S.id!=='hub'||S.visit)return;const o=S.objs.find(o=>o.k==='atlas');if(o)cand('bld',o,8.2,'Open the <b>Hub Atlas</b> <i>browse · like · play player hubs</i>',()=>O.open())}}
+try{TUT.hub.push(['🗺','Hub Atlas','The domed observatory on the south lawn shows every hub other players have published — sky-view previews, monsters, objectives, likes and clears. Pick one and press <b>▶ Play</b>.'])}catch(e){}
+
+/* ===================================================================== the menu ===================================================================== */
+const U=NETUI;
+(function css(){const s=document.createElement('style');s.textContent=`
+#atlp.np.wide{width:min(1120px,96vw)}
+#atlp .nb{padding-bottom:14px}
+.at-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.at-bar .tabs2{margin:0;flex:1;min-width:0;flex-wrap:wrap}
+.at-q{flex:0 1 220px;min-width:150px;padding:8px 12px;border-radius:10px;border:1px solid var(--ln);background:rgba(0,0,0,.35);color:#fff;font:600 13px var(--f)}
+.at-sub{margin:0 0 10px;font-size:12.5px;color:var(--mu)}
+.at-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+.at-card{position:relative;border:1px solid rgba(120,160,255,.25);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,rgba(24,30,72,.92),rgba(9,11,28,.96));cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s;text-align:left;padding:0;color:inherit;font:inherit}
+.at-card:hover,.at-card:focus-visible{transform:translateY(-2px);border-color:var(--go);box-shadow:0 8px 30px rgba(0,0,0,.45),0 0 22px rgba(255,201,74,.18)}
+.at-card.feat{grid-column:span 2;border-color:rgba(255,201,74,.55)}.at-card.feat .at-img{aspect-ratio:16/8}html.mob .at-card.feat .at-img{aspect-ratio:16/6.5}html.mob .at-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.at-img{position:relative;aspect-ratio:16/10;background:radial-gradient(120% 90% at 50% 20%,#24306a,#070a1c);overflow:hidden}
+.at-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.at-img .at-ph{position:absolute;inset:0;display:grid;place-items:center;font-size:44px;opacity:.35}
+.at-tags{position:absolute;left:8px;top:8px;display:flex;gap:5px;flex-wrap:wrap}
+.at-tag{font:800 10.5px var(--f);letter-spacing:.08em;padding:3px 7px;border-radius:7px;background:rgba(6,9,24,.82);border:1px solid var(--ln);color:#dfe6ff}
+.at-tag.go{color:#10142b;background:var(--go);border-color:var(--go)}.at-tag.cy{color:#001;background:var(--cy);border-color:var(--cy)}.at-tag.gr{color:#8dffb8;border-color:rgba(120,255,180,.5)}
+.at-b{padding:8px 11px 11px}
+.at-t{font:700 15.5px var(--fs);letter-spacing:.04em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at-by{font-size:12px;color:var(--mu);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.at-by b{color:#dfe6ff}
+.at-st{display:flex;gap:11px;font:700 12.5px var(--f);margin-top:7px;color:#cfd8ff}.at-st span{white-space:nowrap}.at-st .lk{color:#ff7a96}.at-st .dn{color:var(--go)}
+.at-mon{display:flex;gap:4px;margin-top:7px;min-height:26px;align-items:center}
+.at-mon img{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);object-fit:cover}
+.at-mon img.bs{border-color:#ff5a7a;box-shadow:0 0 8px rgba(255,90,122,.5)}
+.at-mon small{font-size:11px;color:var(--mu);margin-left:2px}
+.at-more{display:flex;justify-content:center;margin-top:14px}
+.at-empty{padding:30px 10px;text-align:center;color:var(--mu)}.at-empty b{display:block;font:700 18px var(--fs);color:#fff;margin-bottom:6px}
+.at-d{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px}
+@media(max-width:820px){.at-d{grid-template-columns:1fr}}
+.at-shot{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(255,201,74,.35);aspect-ratio:16/10;background:radial-gradient(120% 90% at 50% 20%,#24306a,#070a1c)}
+.at-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.at-shot .at-ph{position:absolute;inset:0;display:grid;place-items:center;font-size:60px;opacity:.3}
+.at-shot .at-cap{position:absolute;left:0;right:0;bottom:0;padding:22px 14px 10px;background:linear-gradient(transparent,rgba(4,6,18,.92));font:700 11px var(--f);letter-spacing:.18em;color:#cfe8ff}
+.at-h1{font:700 24px var(--fs);letter-spacing:.05em;color:#fff;margin:0}
+.at-desc{margin:6px 0 0;font-size:13.5px;line-height:1.45;color:#dfe6ff}
+.at-own{display:flex;gap:11px;align-items:center;margin:12px 0}
+.at-own img{width:54px;height:54px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--ln);object-fit:cover}
+.at-own b{font-size:15px}.at-own small{display:block;color:var(--mu);font-size:12px}.at-own .on{color:#6dffb4}
+.at-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.at-n{padding:8px 6px;border-radius:11px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);text-align:center}
+.at-n b{display:block;font:800 19px var(--f);color:#fff}.at-n small{font-size:10.5px;letter-spacing:.12em;color:var(--mu);text-transform:uppercase}
+.at-n.lk b{color:#ff7a96}.at-n.dn b{color:var(--go)}.at-n.pl b{color:var(--cy)}
+.at-acts{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+.at-acts .pb{padding:10px 16px;font-size:14.5px}
+.at-acts .lk.on{background:rgba(255,90,122,.22);border-color:#ff7a96;color:#fff}
+.at-sec{margin-top:14px}.at-sec h4{margin:0 0 7px;font:700 11.5px var(--f);letter-spacing:.22em;color:var(--go)}
+.at-ml{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.at-m{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}
+.at-m img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.06)}
+.at-m b{font-size:13px}.at-m small{display:block;font-size:11px;color:var(--mu)}.at-m.bs{border-color:rgba(255,90,122,.45)}.at-m.bs small{color:#ff8aa4}
+.at-ob{padding:8px 10px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);margin-bottom:7px}
+.at-ob h5{margin:0 0 5px;font:700 13px var(--f);color:#fff}.at-ob h5 small{color:var(--mu);font-weight:600;margin-left:6px}
+.at-ob ol{margin:0;padding-left:0;list-style:none}.at-ob li{display:flex;gap:7px;font-size:12.5px;line-height:1.5;color:#dfe6ff}.at-ob li i{font-style:normal;width:18px;text-align:center}
+.at-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px}.at-kv span{color:var(--mu)}.at-kv b{color:#e8ecff;font-weight:600}
+.at-chips{display:flex;gap:5px;flex-wrap:wrap}.at-chips span{font:600 11.5px var(--f);padding:3px 8px;border-radius:7px;background:rgba(255,255,255,.06);border:1px solid var(--ln)}
+.at-danger{color:#ff8a8a;letter-spacing:.1em}
+.at-back{margin-bottom:10px}
+#atl-chip{position:fixed;left:50%;top:118px;transform:translateX(-50%);z-index:29;display:none;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:999px;background:rgba(8,12,32,.86);border:1px solid rgba(255,201,74,.5);box-shadow:0 0 22px rgba(255,201,74,.18);backdrop-filter:blur(6px);font:600 13px var(--f);color:#e8ecff;max-width:94vw;white-space:nowrap}
+#atl-chip.on{display:flex}#atl-chip b{color:#fff}#atl-chip .mu{color:var(--mu)}
+#atl-chip button{border:1px solid var(--ln);background:rgba(255,255,255,.06);color:#fff;border-radius:999px;padding:5px 11px;font:700 12px var(--f);cursor:pointer}
+#atl-chip button.lk.on{background:rgba(255,90,122,.25);border-color:#ff7a96}
+body.build #atl-chip,body.mm #atl-chip{display:none!important}
+`;document.head.appendChild(s)})();
+const P=U.mk('atlp','🗺 HUB ATLAS',true);
+if(U.panels&&!U.panels.includes('atlp'))U.panels.push('atlp');
+U.onClose=U.onClose||{};U.onClose.atlp=()=>{if(O._paused){window.__pause=O._prevPause;O._paused=false}};
+const body=()=>P.querySelector('.nb');
+const TABS=[['top','★ Featured'],['liked','♥ Most liked'],['played','▶ Most played'],['done','🏆 Most cleared'],['new','✦ Newest'],['mine','🏠 My hub']];
+const st={sort:'top',q:'',page:0,rows:[],total:0,loading:false,err:'',view:'list',sel:null,mine:undefined};
+O.open=function(){U.open('atlp');if(!O._paused){O._prevPause=!!window.__pause;window.__pause=true;O._paused=true}st.view='list';if(!st.rows.length||Date.now()-(st.at||0)>20000)load(true);else render();try{if(document.pointerLockElement)document.exitPointerLock()}catch(e){}};
+O.close=()=>U.close('atlp');
+function api(path,opt){const b=base();if(!b)return Promise.reject(new Error('noserver'));const h=Object.assign({},opt&&opt.body?{'content-type':'application/json'}:{});const t=token();if(t)h['x-token']=t;
+ const ctl=new AbortController();setTimeout(()=>ctl.abort(),9000);return fetch(b+path,{method:opt&&opt.body?'POST':'GET',headers:h,body:opt&&opt.body?JSON.stringify(opt.body):undefined,signal:ctl.signal}).then(r=>r.json().then(j=>{if(!r.ok&&!j.error)j.error='HTTP '+r.status;return j}))}
+function load(reset){if(reset){st.page=0;st.rows=[];st.total=0}st.err='';
+ if(st.sort==='mine'){st.loading=true;render();if(WS())NET.send({t:'atlas',op:'mine'});else{st.loading=false;st.mine=null;render()}return}
+ st.loading=true;render();
+ if(WS()){NET.send({t:'atlas',op:'list',sort:st.sort,q:st.q,page:st.page});return}
+ api(`/atlas?sort=${encodeURIComponent(st.sort)}&q=${encodeURIComponent(st.q)}&page=${st.page}`).then(onList).catch(e=>{st.loading=false;st.err=e.message==='noserver'?'No online server is configured, so there are no player hubs to show.':'The Atlas server can’t be reached right now — try again in a moment.';render()})}
+function onList(m){st.loading=false;st.at=Date.now();if(!m||m.ok===false){st.err=(m&&m.error)||'Could not load the Atlas.';render();return}if(m.sort&&m.sort!==st.sort)return;
+ const seen=new Set(st.rows.map(r=>r.id));for(const r of m.rows||[])if(!seen.has(r.id))st.rows.push(r);st.total=m.total|0;render()}
+function upd(row){if(!row)return;const i=st.rows.findIndex(r=>r.id===row.id);if(i>=0)st.rows[i]=row;if(st.sel&&st.sel.id===row.id)st.sel=row;if(row.mine)st.mine=row;if(O.run&&O.run.id===row.id){O.run.row=row;chip()}}
+if(typeof NET!=='undefined')NET.on_('atlas',m=>{if(m.op==='list')onList(m);else if(m.op==='mine'){st.loading=false;st.mine=m.row;render()}else if(m.op==='entry'){upd(m.row);if(U.isOpen('atlp'))render();if(m.cleared!==undefined)O._lastClear=m}else if(m.op==='gone'){toast('That hub is no longer listed.','bad');st.rows=st.rows.filter(r=>r.id!==m.id);if(st.sel&&st.sel.id===m.id){st.view='list';st.sel=null}render()}});
+/* ---------- pieces ---------- */
+const HT={};const heroImg=k=>{if(HT[k]!==undefined)return HT[k];try{return HT[k]=heroThumb(k)}catch(e){return HT[k]=''}};
+const monImg=k=>{try{return kindTh(k)||''}catch(e){return ''}};
+const monName=k=>{try{const n=(EDEF[k]&&EDEF[k].name)||(CATI[k]&&CATI[k].name)||k;return String(n).split(',')[0].replace(/(^|[\s-])\w/g,c=>c.toUpperCase())}catch(e){return k}};
+const isBoss=k=>{try{return !!(EDEF[k]&&EDEF[k].boss)}catch(e){return false}};
+const KN=k=>{try{return KITS[k]?KITS[k].name:k}catch(e){return k}};
+function monsters(row){const m=row.meta||{},list=[];for(const[k,n]of Object.entries(m.mon||{}))list.push({k,n,boss:isBoss(k)});for(const[k,n]of Object.entries(m.boss||{}))list.push({k,n,boss:true,sp:1});
+ const by={};for(const x of list){const o=by[x.k]||(by[x.k]={k:x.k,n:0,boss:false});o.n+=x.n;o.boss=o.boss||x.boss}return Object.values(by).sort((a,b)=>(b.boss-a.boss)||b.n-a.n)}
+function danger(row){let s=0;for(const m of monsters(row)){const D=(typeof EDEF!=='undefined'&&EDEF[m.k])||{hp:80};s+=m.boss?28*m.n:m.n*Math.max(.4,(D.hp||80)/70)}const lv=s<=0?0:s<8?1:s<20?2:s<40?3:s<70?4:5;return lv}
+const skulls=n=>n?'☠'.repeat(n)+'<span style="opacity:.25">'+'☠'.repeat(5-n)+'</span>':'<span class="mu">peaceful</span>';
+const shotUrl=row=>row.shot?base()+'/atlas/shot/'+encodeURIComponent(row.id)+'.jpg?v='+row.shot:'';
+const STEPI={kill:'⚔',boss:'👑',destroy:'💥',reach:'📍',talk:'💬',collect:'✦',chest:'🎁',relic:'🔮',altar:'🕯',gate:'🚪'};
+function tags(row,i){const t=[];if(st.sort==='top'&&i===0&&!st.q)t.push('<span class="at-tag go">★ FEATURED</span>');if(row.first&&Date.now()-row.first<3*864e5)t.push('<span class="at-tag cy">NEW</span>');if(row.here)t.push(`<span class="at-tag gr">● ${row.here} exploring</span>`);if(row.mine)t.push('<span class="at-tag">YOURS</span>');return t.join('')}
+function card(row,i){const ms=monsters(row),u=shotUrl(row);
+ return `<button class="at-card ${st.sort==='top'&&i===0&&!st.q?'feat':''}" data-id="${E(row.id)}"><div class="at-img">${u?`<img loading="lazy" src="${u}" alt="">`:'<div class="at-ph">🏰</div>'}<div class="at-tags">${tags(row,i)}</div></div>
+ <div class="at-b"><div class="at-t">${E(row.title)}</div><div class="at-by">by ${row.tag?'<span style="color:var(--go)">['+E(row.tag)+']</span> ':''}<b>${E(row.name)}</b> · ${row.meta&&row.meta.scenes>1?row.meta.scenes+' scenes':'1 scene'}</div>
+ <div class="at-st"><span title="Plays">▶ ${fmt(row.plays)}</span><span class="lk" title="Likes">${row.liked?'♥':'♡'} ${fmt(row.likes)}</span><span class="dn" title="Full clears">🏆 ${fmt(row.done)}</span>${row.meta&&row.meta.quests?'':'<span class="mu" style="font-weight:600">free roam</span>'}</div>
+ <div class="at-mon">${ms.slice(0,7).map(m=>`<img class="${m.boss?'bs':''}" src="${monImg(m.k)}" title="${E(monName(m.k))} ×${m.n}" alt="">`).join('')}${ms.length>7?`<small>+${ms.length-7}</small>`:''}${ms.length?'':'<small>No monsters — a place to explore</small>'}</div></div></button>`}
+function listView(){const b=[];const tabs=TABS.map(([k,n])=>`<button data-s="${k}" class="${st.sort===k?'on':''}">${n}</button>`).join('');
+ b.push(`<div class="at-bar"><div class="tabs2">${tabs}</div>${st.sort==='mine'?'':`<input class="at-q" id="at-q" placeholder="Search hubs or builders…" value="${E(st.q)}" maxlength="24">`}</div>`);
+ if(st.sort==='mine')return b.join('')+mineView();
+ b.push(`<p class="at-sub">${MP()?'':'Campaign view · '}Every hub below was built in the Dungeon Forge and published by its player. ${st.total?`<b>${fmt(st.total)}</b> hub${st.total===1?'':'s'} listed.`:''} Tap a hub for its preview, monsters and objectives.</p>`);
+ if(st.err)b.push(`<div class="at-empty"><b>Atlas unavailable</b>${E(st.err)}</div>`);
+ else if(!st.rows.length&&st.loading)b.push('<div class="at-empty"><b>Unrolling the Atlas…</b>Fetching the latest hubs.</div>');
+ else if(!st.rows.length)b.push(`<div class="at-empty"><b>${st.q?'No hubs match that search':'No hubs published yet'}</b>${st.q?'Try another name.':MP()?'Be the first: build in the Dungeon Forge (Builder’s Portal, east of the plaza) and press 💾 Save — it appears here.':'Hubs appear here once players publish them from Multiplayer.'}</div>`);
+ else{b.push(`<div class="at-grid">${st.rows.map(card).join('')}</div>`);if(st.rows.length<st.total)b.push(`<div class="at-more"><button class="pb ghost" data-a="more">${st.loading?'Loading…':'Show more hubs'}</button></div>`)}
+ return b.join('')}
+function detailView(row){const m=row.meta||{},ms=monsters(row),u=shotUrl(row),rate=row.plays?Math.round(row.done/row.plays*100):0,dg=danger(row);
+ const ownLine=`${row.tag?'<span style="color:var(--go)">['+E(row.tag)+']</span> ':''}<b>${E(row.name)}</b>${MP()&&row.online?' <span class="on">● online</span>':''}<small>${E(KN(row.hero))} · Level ${row.lv|0}${row.pr?' · ♛ '+row.pr:''}</small>`;
+ const likeBtn=row.mine?'<button class="pb ghost" disabled title="You can’t like your own hub">♥ '+fmt(row.likes)+'</button>':`<button class="pb ghost lk ${row.liked?'on':''}" data-a="like">${row.liked?'♥ Liked':'♡ Like'} · ${fmt(row.likes)}</button>`;
+ return `<button class="pb sm ghost at-back" data-a="back">← All hubs</button><div class="at-d"><div>
+ <div class="at-shot">${u?`<img src="${u}" alt="Sky view of ${E(row.title)}">`:'<div class="at-ph">🏰</div>'}<div class="at-cap">SKY VIEW · ${E((m.names&&m.names[0])||row.title).toUpperCase()}${row.here?` · ● ${row.here} EXPLORING NOW`:''}</div></div>
+ <div class="at-sec"><h4>MONSTERS ${ms.length?'· '+ms.reduce((a,x)=>a+x.n,0):''}</h4>${ms.length?`<div class="at-ml">${ms.map(x=>`<div class="at-m ${x.boss?'bs':''}"><img src="${monImg(x.k)}" alt=""><div><b>${E(monName(x.k))}</b><small>${x.boss?'Boss · ':''}×${x.n}</small></div></div>`).join('')}</div>`:'<p class="mu" style="margin:0">No monsters — a peaceful hub to explore.</p>'}${ms.length?'<p class="mu" style="margin:6px 0 0;font-size:11.5px">Spawners respawn their foes; counts show how many each keeps alive.</p>':''}</div>
+ <div class="at-sec"><h4>OBJECTIVES ${m.quests?'· '+m.quests+' quest'+(m.quests>1?'s':''):''}</h4>${(m.obj||[]).length?(m.obj||[]).map(q=>`<div class="at-ob"><h5>${E(q.title||q.scene)}<small>${E(q.scene)}</small></h5><ol>${q.steps.map(s=>`<li><i>${STEPI[s.type]||'•'}</i><span>${E(s.text||s.type)}</span></li>`).join('')}</ol></div>`).join(''):'<p class="mu" style="margin:0">No objectives — free roam. (A hub can be <b>cleared</b> once its builder adds objectives.)</p>'}</div>
+ </div><div>
+ <h2 class="at-h1">${E(row.title)}</h2>${row.desc?`<p class="at-desc">${E(row.desc)}</p>`:''}
+ <div class="at-own"><img src="${heroImg(row.hero)}" alt=""><div>${ownLine}</div></div>
+ <div class="at-acts"><button class="pb" data-a="play">▶ ${row.mine?'Play my hub':'Play'}</button>${likeBtn}${MP()&&WS()&&!row.mine?'<button class="pb ghost" data-a="prof">👤 Profile</button>':''}</div>
+ <div class="at-nums"><div class="at-n pl"><b>${fmt(row.plays)}</b><small>Plays</small></div><div class="at-n lk"><b>${fmt(row.likes)}</b><small>Likes</small></div><div class="at-n dn"><b>${fmt(row.done)}</b><small>Full clears</small></div></div>
+ <div class="at-sec"><h4>DETAILS</h4><div class="at-kv">
+  <span>Danger</span><b class="at-danger">${skulls(dg)}</b>
+  <span>Clear rate</span><b>${m.quests?(row.plays?rate+'% of plays':'—'):'free roam'}</b>
+  <span>Best clear</span><b>${row.best?mmss(row.best.sec)+' · '+E(row.best.name):'—'}</b>
+  <span>Average clear</span><b>${row.avg?mmss(row.avg):'—'}</b>
+  <span>Exploring now</span><b>${row.here|0} player${(row.here|0)===1?'':'s'}</b>
+  <span>Scenes</span><b>${m.scenes|0} · ${fmt(m.objs)} objects · ${Math.round((m.area||0)/100)/10}k m²</b>
+  <span>Updated</span><b>${ago(row.updated)}</b>
+  <span>First published</span><b>${row.first?new Date(row.first).toLocaleDateString():'—'}</b></div></div>
+ ${(m.names||[]).length>1?`<div class="at-sec"><h4>SCENES</h4><div class="at-chips">${m.names.map(n=>`<span>${E(n)}</span>`).join('')}</div></div>`:''}
+ ${MP()?'':'<p class="mu" style="font-size:12px;margin-top:12px">Campaign: your clears count in the Atlas. Likes use your Multiplayer account on this browser.</p>'}
+ </div></div>`}
+function mineView(){
+ if(!MP())return `<div class="at-empty"><b>Hubs are published from Multiplayer</b>Open <b>Multiplayer</b> from the main menu, build in the <b>Dungeon Forge</b> (Builder’s Portal east of the plaza) and press <b>💾 Save</b> — your hub appears in the Atlas for everyone, in both modes.</div>`;
+ if(!NET.authed)return `<div class="at-empty"><b>Not connected</b>Connect to the server to publish your hub and see its stats.</div>`;
+ if(st.loading&&st.mine===undefined)return '<div class="at-empty"><b>Loading your hub…</b></div>';
+ const r=st.mine,pub=pubPref();
+ if(!r)return `<div class="at-empty"><b>You haven’t published a hub yet</b>Build in the <b>Dungeon Forge</b> and press <b>💾 Save</b> — it is uploaded with a sky-view preview and listed here.<div class="at-acts" style="justify-content:center"><button class="pb" data-a="forge">🏗 Go to the Dungeon Forge</button></div></div>`;
+ return `<div class="at-d"><div><div class="at-shot">${r.shot?`<img src="${shotUrl(r)}" alt="">`:'<div class="at-ph">🏰</div>'}<div class="at-cap">YOUR HUB · ${r.public?'LISTED IN THE ATLAS':'UNLISTED'}</div></div></div><div>
+ <h2 class="at-h1">${E(r.title)}</h2><p class="at-desc">${r.public?'Everyone can find and play it in the Atlas.':'Hidden from the Atlas — only you (and your party) can visit it.'} Updated ${ago(r.updated)}.</p>
+ <div class="at-nums"><div class="at-n pl"><b>${fmt(r.plays)}</b><small>Plays</small></div><div class="at-n lk"><b>${fmt(r.likes)}</b><small>Likes</small></div><div class="at-n dn"><b>${fmt(r.done)}</b><small>Full clears</small></div></div>
+ <div class="at-kv"><span>Best clear</span><b>${r.best?mmss(r.best.sec)+' · '+E(r.best.name):'—'}</b><span>Average clear</span><b>${r.avg?mmss(r.avg):'—'}</b><span>Exploring now</span><b>${r.here|0}</b><span>Objectives</span><b>${(r.meta&&r.meta.quests)?r.meta.quests+' quest scene(s) — clears are counted':'none yet — add objectives (Scene tab) so players can clear it'}</b></div>
+ <div class="at-acts"><button class="pb" data-a="pub">⬆ Publish latest</button><button class="pb ghost" data-a="vis">${r.public?'🙈 Unlist':'🌐 List in the Atlas'}</button><button class="pb ghost" data-a="play" data-id="${E(r.id)}">▶ Play my hub</button></div>
+ <p class="mu" style="font-size:12px">💾 Save in the Dungeon Forge publishes automatically${pub?'':' (currently as unlisted)'}. Saving inside your first scene refreshes the sky-view shot.</p></div></div>`}
+function render(){if(!U.isOpen('atlp'))return;const b=body();b.innerHTML=st.view==='detail'&&st.sel?detailView(st.sel):listView();
+ const q=b.querySelector('#at-q');if(q){q.oninput=()=>{clearTimeout(O._qt);O._qt=setTimeout(()=>{st.q=q.value.trim();load(true);setTimeout(()=>{const n=body().querySelector('#at-q');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}},0)},380)};q.onkeydown=e=>e.stopPropagation()}}
+P.addEventListener('click',e=>{const t=e.target.closest('[data-s]');if(t){st.sort=t.dataset.s;st.view='list';load(true);return}
+ const a=e.target.closest('[data-a]');if(a){const k=a.dataset.a,row=st.sel;
+  if(k==='more'){st.page++;load(false)}else if(k==='back'){st.view='list';render()}
+  else if(k==='like'&&row)like(row,!row.liked);else if(k==='play')play(a.dataset.id?(st.mine||row):row);else if(k==='prof'&&row){try{U.profile(row.id)}catch(x){}}
+  else if(k==='pub'){O.publish(true)}else if(k==='vis'&&st.mine){const v=!st.mine.public;setPref(v);NET.send({t:'hubvis',public:v});st.mine.public=v;render();toast(v?'Your hub is listed in the Hub Atlas':'Your hub is unlisted','done')}
+  else if(k==='forge'){O.close();try{BLD.gate()}catch(x){}}return}
+ const c=e.target.closest('.at-card');if(c){const row=st.rows.find(r=>r.id===c.dataset.id);if(row){st.sel=row;st.view='detail';render();body().scrollTop=0;if(WS())NET.send({t:'atlas',op:'get',id:row.id});else api('/atlas/entry/'+encodeURIComponent(row.id)).then(j=>{if(j&&j.row){upd(j.row);render()}}).catch(()=>{})}}});
+/* ---------- like ---------- */
+function like(row,on){if(row.mine)return;
+ if(WS()){NET.send({t:'atlas',op:'like',id:row.id,on});}
+ else{if(!token()){toast('Sign in to <b>Multiplayer</b> once on this browser to like hubs.','bad');return}api('/atlas/like/'+encodeURIComponent(row.id),{body:{on}}).then(j=>{if(j&&j.row){upd(j.row);render()}else toast((j&&j.error)||'Could not like right now','bad')}).catch(()=>toast('The Atlas server can’t be reached','bad'))}
+ row.liked=on;row.likes=Math.max(0,(row.likes|0)+(on?1:-1));upd(row);render();chip();try{sfx(on?880:440,.08,'sine',.04,on?300:-120)}catch(e){}}
+O.like=like;
+/* ---------- play ---------- */
+function play(row){if(!row)return;
+ if(row.mine&&MP()){O.close();try{BLD.gate()}catch(e){try{travel('mine-1')}catch(x){}}return}
+ O.run={id:row.id,row,name:row.name,title:row.title,start:0,done:new Set(),reported:false};
+ if(WS()){O.close();NET.visitHub(row.id);return}
+ toast('Opening <b>'+E(row.title)+'</b>…');
+ api('/atlas/hub/'+encodeURIComponent(row.id)).then(j=>{if(!j||!j.ok||!j.scenes||!j.scenes.length){toast('That hub is not available right now.','bad');return}O.close();loadVisit(j);row.plays=(row.plays|0)+1}).catch(()=>toast('The Atlas server can’t be reached','bad'))}
+O.play=play;
+/* same scene import as a multiplayer visit (net.js · hubdata): prefixed scene ids, portals re-linked, never written to this save (gen) */
+function loadVisit(m){const ids=new Set(m.scenes.map(s=>s.id)),pre='v~'+m.id+'~';let first=null;
+ for(const sc0 of m.scenes){const sc=JSON.parse(JSON.stringify(sc0));sc.visit=m.id;sc.visitOf=sc0.id;sc.visitName=m.name;sc.id=pre+sc0.id;sc.mine=1;sc.gen=1;delete sc.ed;sc.name=(sc.name||'Dungeon')+' · '+m.name;
+  for(const o of sc.objs||[])if(o.d&&o.d.target&&ids.has(o.d.target))o.d.target=pre+o.d.target;
+  DB.scenes[sc.id]=sc;if(!first||sc0.id==='mine-1')first=sc.id}
+ try{if(MODE!=='play')setMode('play')}catch(e){}travel(first);toast('Visiting <b>'+E(m.name)+'</b>’s hub')}
+/* ---------- the visit bar (title · like · objectives · leave) ---------- */
+const bar=document.createElement('div');bar.id='atl-chip';document.body.appendChild(bar);
+function questScenes(vid){return Object.values(DB.scenes).filter(s=>s&&s.visit===vid&&s.quest&&s.quest.steps&&s.quest.steps.length).map(s=>s.id)}
+function chip(){const r=O.run;if(!r||!S||S.visit!==r.id){bar.classList.remove('on');return}const row=r.row||{},q=questScenes(r.id);
+ bar.innerHTML=`<span>🗺 <b>${E(row.title||r.title||'Player hub')}</b> <span class="mu">by ${E(row.name||r.name||S.visitName||'')}</span></span>${q.length?`<span class="mu">🏆 ${r.done.size}/${q.length}</span>`:''}${row.mine?'':`<button class="lk ${row.liked?'on':''}" data-c="like">${row.liked?'♥':'♡'} ${fmt(row.likes)}</button>`}<button data-c="leave">⟵ Hub</button>`;bar.classList.add('on')}
+bar.addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b||!O.run)return;if(b.dataset.c==='like'){const row=O.run.row||{id:O.run.id,likes:0};if(!O.run.row)O.run.row=row;like(row,!row.liked)}else if(b.dataset.c==='leave'){try{travel('hub')}catch(x){}}});
+/* main.js assigns Hooks.onLoad after this module loads, so the scene hook is chained at boot (the same moment net.js chains its own) */
+{const g=PROF.gate;PROF.gate=function(fn){g(function(){const f=Hooks.onLoad;Hooks.onLoad=function(o){f(o);try{onScene()}catch(e){console.error('atlas scene',e)}};fn()})}}
+function onScene(){if(!S)return;if(S.visit){if(!O.run||O.run.id!==S.visit)O.run={id:S.visit,row:null,name:S.visitName,title:'',start:0,done:new Set(),reported:false};if(!O.run.start)O.run.start=performance.now();
+  if(!O.run.row||O.run.row.id!==S.visit){const id=S.visit;if(WS())NET.send({t:'atlas',op:'get',id});else api('/atlas/entry/'+encodeURIComponent(id)).then(j=>{if(j&&j.row&&O.run&&O.run.id===id){O.run.row=j.row;chip()}}).catch(()=>{})}}
+ else if(O.run&&!transition)O.run=null;chip()}
+NET.on_('atlas',m=>{if(m.op==='entry'&&O.run&&m.row&&m.row.id===O.run.id){O.run.row=m.row;chip()}});
+/* ---------- clears: every objective scene of the hub finished in one visit ---------- */
+{const _fc=finishChapter;finishChapter=function(){const r=_fc.apply(this,arguments);try{onClear()}catch(e){console.error('atlas clear',e)}return r}}
+function onClear(){const r=O.run;if(!S||!S.visit||!r||r.id!==S.visit)return;r.done.add(S.id);chip();const need=questScenes(r.id);if(!need.length||!need.every(id=>r.done.has(id))||r.reported)return;r.reported=true;
+ const sec=Math.round((performance.now()-(r.start||performance.now()))/1000),title=(r.row&&r.row.title)||'this hub';
+ if(WS())NET.send({t:'atlas',op:'done',id:r.id,sec});else api('/atlas/done/'+encodeURIComponent(r.id),{body:{sec,name:'Campaign · '+KN(Hero.key)}}).then(j=>{if(j&&j.row){r.row=j.row;chip()}}).catch(()=>{});
+ setTimeout(()=>toast(`🏆 <b>Hub cleared!</b> ${E(title)} in ${mmss(sec)} — your clear counts in the Hub Atlas.${r.row&&!r.row.mine&&!r.row.liked?' Enjoyed it? Tap ♡ in the bar above.':''}`,'done'),2600)}
+/* ===================================================================== publishing (Multiplayer) ===================================================================== */
+const pubPref=()=>ls('nca_atlas_pub')!=='0';const setPref=v=>ls('nca_atlas_pub',v?'1':'0');
+O.pubPref=pubPref;
+let shotData=null,shotDirty=false;try{shotData=ls('nca_atlas_shot')||null}catch(e){}
+O.shot=()=>shotDirty?shotData:null;     /* only a NEW shot is uploaded; the server keeps the last one */
+if(typeof NET!=='undefined'){const _p=NET.publishHub;NET.publishHub=function(pub,cb){if(pub===true||pub===false)setPref(pub);return _p.call(this,pub,cb)};
+ NET.on_('hubpub',m=>{if(m.entry){shotDirty=shotDirty&&!m.entry.shot;if(!m.entry.shot&&shotData)shotDirty=true;st.mine=m.entry;if(U.isOpen('atlp'))render()}else if(m.vis&&st.mine){st.mine.public=m.public;if(U.isOpen('atlp'))render()}})}
+/* sky view: the current scene from high above, rendered through the game's own post-processing (same look as play) into the
+   main canvas, copied out in the same task and immediately replaced by the normal view again — nothing flashes on screen */
+O.capture=function(){if(!S||!RT||!RT.root||typeof R==='undefined'||typeof post==='undefined')return null;const W=640,H=400,hid=[];const sky0=skyMesh.position.clone();
+ try{const hide=o=>{if(o&&o.visible){o.visible=false;hid.push(o)}};try{hide(Edit.ghost)}catch(e){}try{hide(selBox)}catch(e){}try{hide(brushRing)}catch(e){}try{hide(heroG)}catch(e){}
+  const cw=cv.width,ch=cv.height,size=Math.max(S.w||60,S.d||60),cy=(RT.terr&&RT.terr.H)?RT.terr.H(0,0):0,cam=new THREE.PerspectiveCamera(36,cw/ch,1,size*8);
+  const ar=cw/ch,k=ar<1.6?1.6/ar:1;cam.position.set(size*.04,cy+size*.74*k,size*.56*k);cam.lookAt(0,cy,size*.02);cam.updateMatrixWorld();skyMesh.position.copy(cam.position);
+  const pc=post.cfg||{},keep={grain:pc.grain,ca:pc.ca,vig:pc.vig};try{pc.grain=0;pc.ca=0;pc.vig=Math.min(.6,pc.vig||0)}catch(e){}
+  try{post.render(SC,cam,TIME,CTX.exposure*1.55)}finally{Object.assign(pc,keep)}
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
+  let sw=cw,sh=cw/1.6,sx=0,sy=(ch-sh)/2;if(cw/ch>1.6){sh=ch;sw=ch*1.6;sx=(cw-sw)/2;sy=0}x.drawImage(cv,sx,sy,sw,sh,0,0,W,H);
+  return c.toDataURL('image/jpeg',.84)}catch(e){console.warn('atlas capture',e);return null}
+ finally{for(const o of hid)o.visible=true;skyMesh.position.copy(sky0);try{post.render(SC,CAM,TIME,CTX.exposure)}catch(e){}}};
+O.publish=function(force){if(!MP())return;try{if(S&&BLD.mine(S)&&(S.id===BLD.baseId||!shotData||force)){const d=O.capture();if(d){shotData=d;shotDirty=true;ls('nca_atlas_shot',d)}}}catch(e){}
+ if(!NET.authed){toast('Saved on this device — connect to the server to publish it to the <b>Hub Atlas</b>.','bad');return}
+ const pub=pubPref();NET.publishHub(pub,()=>toast(pub?'🗺 Saved · your hub is <b>live in the Hub Atlas</b>':'Saved on the server · unlisted (Hub Atlas → My hub to list it)','done'))};
+if(typeof BLD!=='undefined'){const _s=BLD.save;BLD.save=function(){const was=!!(S&&BLD.mine(S));const r=_s.apply(this,arguments);if(was)setTimeout(()=>O.publish(false),60);return r};const b=document.getElementById('b-save');if(b)b.onclick=BLD.save}
+return O})();
 </script>
 <script>
 /* ============ MAIN · boot, mode switching, render loop ============ */

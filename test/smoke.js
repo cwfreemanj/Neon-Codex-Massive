@@ -17,6 +17,10 @@ function client(url) {
   return c;
 }
 async function login(url, name, extra) { const c = client(url); await c.open; c.send({ t: 'hello', name, hero: 'starr', pal: {}, ...extra }); c.w = await c.wait(m => m.t === 'welcome' || m.t === 'denied'); return c; }
+function get(p, headers, raw) { return new Promise(res => { http.get({ port: PORT, path: p, headers: headers || {} }, rs => { const ch = []; rs.on('data', d => ch.push(d)); rs.on('end', () => { const b = Buffer.concat(ch); res({ code: rs.statusCode, type: rs.headers['content-type'], buf: b, j: raw ? null : (() => { try { return JSON.parse(b.toString() || '{}'); } catch (e) { return {}; } })() }); }); }); }); }
+function postJ(p, o, headers) { return new Promise(res => { const r = http.request({ port: PORT, path: p, method: 'POST', headers: { 'content-type': 'application/json', ...(headers || {}) } }, rs => { let b = ''; rs.on('data', d => b += d); rs.on('end', () => res({ code: rs.statusCode, j: JSON.parse(b || '{}') })); }); r.end(JSON.stringify(o)); }); }
+function startServer(extra) { const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT, DATA_DIR: DIR, WIX_SHARED_SECRET: SECRET, DEV_GRANT: '1', COOL_SCALE: '0', LB_TTL: '0', ...(extra || {}) }, stdio: ['ignore', 'pipe', 'inherit'] }); return new Promise(r => srv.stdout.on('data', d => { if (/on :/.test(d)) r(srv); })); }
+const SHOT = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]).toString('base64');
 function post(p, body, sig) { return new Promise(res => { const r = http.request({ port: PORT, path: p, method: 'POST', headers: { 'x-signature': sig } }, rs => { let b = ''; rs.on('data', d => b += d); rs.on('end', () => res({ code: rs.statusCode, j: JSON.parse(b || '{}') })); }); r.end(body); }); }
 
 (async () => {
@@ -110,9 +114,66 @@ function post(p, body, sig) { return new Promise(res => { const r = http.request
     const body2 = JSON.stringify({ memberId: 'wix-123', orderId: 'ord-2', stars: 100 }); const r2 = await post('/wix/credit', body2, hmac(body2)); const lst = await w.wait(m => m.t === 'stars' && m.bal === 600); ok(r2.j.credited && lst.bal === 600, 'credit for a linked, online member is pushed live');
     const forged = await login(URL, 'Forger', { wix: { id: 'wix-123', ts, sig: 'deadbeef' } }); ok(forged.w.t === 'welcome' && !forged.w.wix, 'forged Wix signature does not take over the account');
 
+    console.log('accounts across devices');
+    const pa1 = await login(URL, 'Paula'); ok(pa1.w.t === 'welcome' && pa1.w.hasPw === false, 'new account has no password yet');
+    pa1.send({ t: 'setpw', pw: '123' }); const pws = await pa1.wait(m => m.t === 'pwset'); ok(!pws.ok, 'too-short password refused');
+    pa1.clear(); pa1.send({ t: 'setpw', pw: 'sunflower9' }); const pwo = await pa1.wait(m => m.t === 'pwset'); ok(pwo.ok, 'password set');
+    const tk = await login(URL, 'paula'); ok(tk.w.t === 'denied' && tk.w.code === 'taken' && tk.w.hasPw, 'name taken → asks for its password');
+    const wr = await login(URL, 'Paula', { pw: 'wrong-one' }); ok(wr.w.t === 'denied' && wr.w.code === 'badpw', 'wrong password denied');
+    const ph = await login(URL, 'PAULA', { pw: 'sunflower9' }); ok(ph.w.t === 'welcome' && ph.w.id === pa1.w.id && ph.w.token && ph.w.token !== pa1.w.token, 'name + password signs in on a second device (own token)');
+    const pd = await login(URL, '', { token: pa1.w.token }); ok(pd.w.t === 'welcome' && pd.w.id === pa1.w.id, 'first device token still works');
+    const pd2 = await login(URL, '', { token: ph.w.token }); ok(pd2.w.t === 'welcome' && pd2.w.id === pa1.w.id, 'second device token works too');
+    for (let i = 0; i < 6; i++) await login(URL, 'Paula', { pw: 'nope' + i }); const thr = await login(URL, 'Paula', { pw: 'sunflower9' }); ok(thr.w.code === 'slow', 'repeated wrong passwords are throttled');
+    const nk = await login(URL, '', { token: 'ab'.repeat(24), recover: true }); ok(nk.w.t === 'denied' && nk.w.code === 'nokey', 'unknown recovery key is refused (no ghost account)');
+    const np = await login(URL, 'Quinn', { newpw: 'quinnpass' }); ok(np.w.hasPw, 'password can be chosen when creating the account');
+
+    console.log('cloud save');
+    pd2.clear(); pd2.send({ t: 'save', blob: { nca_prog_v1: '{"PROG":{"_hero":{"starr":{"lv":12,"pr":1}}}}' } }); const sv1 = await pd2.wait(m => m.t === 'saved'); ok(sv1.at > 0, 'save acknowledged');
+    pd2.send({ t: 'loadsave' }); const ld = await pd2.wait(m => m.t === 'savedata'); ok(ld.save && /"lv":12/.test(ld.save.blob.nca_prog_v1), 'save loads back');
+    pd2.send({ t: 'save', blob: null }); const sv0 = await pd2.wait(m => m.t === 'saved' && m.ok === false); ok(sv0.why === 'empty', 'empty save rejected with a reason (not silently)');
+
+    console.log('hub atlas');
+    const scenes = [{ id: 'mine-1', name: 'Bone Garden', desc: 'Mind the spikes', theme: 'crypt', w: 60, d: 60, objs: [{ k: 'spawner', d: { kind: 'brute', count: 3 } }, { k: 'parasite' }, { k: 'bossSpawn', d: { kind: 'maw' } }, { k: 'tree' }],
+      quest: { title: 'The Garden', steps: [{ type: 'kill', text: 'Clear the brutes' }, { type: 'boss', text: 'Slay the Maw' }] } }, { id: 'mine-2', name: 'Vault', objs: [] }];
+    pd2.clear(); pd2.send({ t: 'hubpub', public: true, scenes, shot: SHOT }); const hp = await pd2.wait(m => m.t === 'hubpub');
+    ok(hp.entry && hp.entry.title === 'Bone Garden' && hp.entry.meta.mon.brute === 3 && hp.entry.meta.mon.parasite === 1 && hp.entry.meta.boss.maw === 1 && !hp.entry.meta.mon.tree, 'publish computes monsters/bosses from the scenes');
+    ok(hp.entry.meta.quests === 1 && hp.entry.meta.obj[0].steps.length === 2 && hp.entry.meta.scenes === 2, 'publish lists objectives and scene count');
+    b.clear(); b.send({ t: 'atlas', op: 'list' }); const al = await b.wait(m => m.t === 'atlas' && m.op === 'list'); const row = al.rows.find(r => r.id === pa1.w.id); ok(row && row.shot > 0 && row.plays === 0 && row.likes === 0, 'Atlas lists the hub with a preview shot');
+    b.send({ t: 'hubget', id: pa1.w.id }); await b.wait(m => m.t === 'hubdata' && m.id === pa1.w.id); b.clear(); b.send({ t: 'hubget', id: pa1.w.id }); await b.wait(m => m.t === 'hubdata' && m.id === pa1.w.id);
+    b.send({ t: 'atlas', op: 'get', id: pa1.w.id }); const g1 = await b.wait(m => m.t === 'atlas' && m.op === 'entry'); ok(g1.row.plays === 1, 'a visit counts one play (repeat visits within 20 min do not)');
+    pd2.clear(); pd2.send({ t: 'hubget', id: pa1.w.id }); await pd2.wait(m => m.t === 'hubdata'); pd2.send({ t: 'atlas', op: 'mine' }); const mine = await pd2.wait(m => m.t === 'atlas' && m.op === 'mine'); ok(mine.row.plays === 1 && mine.row.mine, 'owner visiting their own hub adds no play');
+    b.clear(); b.send({ t: 'atlas', op: 'like', id: pa1.w.id, on: true }); const lk = await b.wait(m => m.t === 'atlas' && m.op === 'entry'); ok(lk.row.likes === 1 && lk.row.liked, 'like');
+    b.clear(); b.send({ t: 'atlas', op: 'like', id: pa1.w.id, on: true }); const lk2 = await b.wait(m => m.t === 'atlas' && m.op === 'entry'); ok(lk2.row.likes === 1, 'liking twice still counts once');
+    pd2.clear(); pd2.send({ t: 'atlas', op: 'like', id: pa1.w.id, on: true }); const own = await pd2.wait(m => m.t === 'notice'); ok(/own hub/.test(own.text), 'cannot like your own hub');
+    b.clear(); b.send({ t: 'atlas', op: 'done', id: pa1.w.id, sec: 245 }); const dn = await b.wait(m => m.t === 'atlas' && m.op === 'entry'); ok(dn.row.done === 1 && dn.row.best.sec === 245 && dn.row.best.name === 'Bobby' && dn.cleared, 'completion counted with best clear time');
+    b.clear(); b.send({ t: 'atlas', op: 'done', id: pa1.w.id, sec: 100 }); const dn2 = await b.wait(m => m.t === 'atlas' && m.op === 'entry'); ok(dn2.row.done === 1 && !dn2.cleared, 'same player clearing again soon is not double-counted');
+    const hl = await get('/atlas?sort=liked'); ok(hl.code === 200 && hl.j.rows.some(r => r.id === pa1.w.id && r.likes === 1), 'HTTP Atlas list (campaign mode)');
+    const im = await get('/atlas/shot/' + pa1.w.id + '.jpg', {}, true); ok(im.code === 200 && /image\/jpeg/.test(im.type) && im.buf[0] === 0xff && im.buf[1] === 0xd8, 'preview shot served as a JPEG');
+    const hh = await get('/atlas/hub/' + pa1.w.id); ok(hh.code === 200 && hh.j.scenes.length === 2, 'HTTP hub download (campaign play)');
+    const he = await get('/atlas/entry/' + pa1.w.id); ok(he.j.row.plays === 2, 'anonymous campaign play counted');
+    const hd2 = await postJ('/atlas/done/' + pa1.w.id, { sec: 90, name: 'Camper' }); ok(hd2.j.row.done === 2 && hd2.j.row.best.sec === 90 && hd2.j.row.best.name === 'Camper', 'campaign completion counted, new best time');
+    ok((await postJ('/atlas/like/' + pa1.w.id, { on: true })).code === 401, 'campaign like without an account is refused');
+    const tl = await postJ('/atlas/like/' + pa1.w.id, { on: true }, { 'x-token': a.w.token }); ok(tl.j.row.likes === 2 && tl.j.row.liked, 'campaign like with the multiplayer token');
+    pd2.clear(); pd2.send({ t: 'hubvis', public: false }); await pd2.wait(m => m.t === 'hubpub' && m.vis); const hidden = await get('/atlas'); ok(!hidden.j.rows.some(r => r.id === pa1.w.id) && (await get('/atlas/hub/' + pa1.w.id)).code === 404, 'unlisting hides the hub from the Atlas');
+    pd2.send({ t: 'hubvis', public: true }); await sleep(100);
+    const h1 = await get('/health'); ok(h1.j.persistent === true && h1.j.hubs >= 1, '/health reports persistence + hub count');
+
     console.log('persistence');
     srv.kill('SIGTERM'); await sleep(500);
     const saved = JSON.parse(fs.readFileSync(path.join(DIR, 'players.json'), 'utf8')); ok(Object.values(saved).some(p => p.name === 'Alice' && p.kills >= 150) && Object.values(saved).some(p => p.wix === 'wix-123' && p.stars === 600), 'players.json written on shutdown');
+    ok(!JSON.stringify(saved).includes('nca_prog_v1') && fs.existsSync(path.join(DIR, 'saves', pa1.w.id + '.json')) && fs.existsSync(path.join(DIR, 'hubs', pa1.w.id + '.jpg')), 'saves / hubs / shots live in their own files, players.json stays small');
+    const srv2 = await startServer({ COOL_SCALE: '1' });
+    try {
+      const back = await login(URL, 'Paula', { pw: 'sunflower9' }); ok(back.w.t === 'welcome' && back.w.hasSave && back.w.hasPw, 'after a restart: account, password and save are still there');
+      back.send({ t: 'loadsave' }); const ls2 = await back.wait(m => m.t === 'savedata'); ok(ls2.save && /"lv":12/.test(ls2.save.blob.nca_prog_v1), 'after a restart: the cloud save restores');
+      const ar = await get('/atlas'); const r2 = ar.j.rows.find(r => r.id === pa1.w.id); ok(r2 && r2.done === 2 && r2.likes === 2 && r2.plays === 2, 'after a restart: Atlas stats kept');
+      back.clear(); for (let i = 1; i <= 3; i++) back.send({ t: 'save', blob: { nca_prog_v1: '{"burst":' + i + '}' } });
+      await back.wait(m => m.t === 'saved'); await sleep(1300); const acks = back.log.filter(m => m.t === 'saved').length; back.send({ t: 'loadsave' }); const lb3 = await back.wait(m => m.t === 'savedata');
+      ok(acks === 2 && lb3.save.blob.nca_prog_v1 === '{"burst":3}', 'a burst of saves is coalesced, the newest is kept (not dropped)');
+      back.send({ t: 'save', blob: { nca_prog_v1: '{"burst":4}' } }); back.send({ t: 'save', blob: { nca_prog_v1: '{"last":"on-close"}' } }); back.ws.close(); await sleep(300);
+      const again = await login(URL, 'Paula', { pw: 'sunflower9' }); again.send({ t: 'loadsave' }); const lc = await again.wait(m => m.t === 'savedata'); ok(lc.save.blob.nca_prog_v1 === '{"last":"on-close"}', 'the save sent while closing the tab is written, not lost');
+      ok(fs.existsSync(path.join(DIR, 'saves', pa1.w.id + '.prev.json')), 'previous save version kept as a rollback copy');
+    } finally { srv2.kill('SIGTERM'); await sleep(400); }
   } catch (e) { fails++; console.log('  FAIL exception: ' + e.stack); }
   try { srv.kill(); } catch (e) { }
   console.log(`\n${passes} passed, ${fails} failed`); process.exit(fails ? 1 : 0);

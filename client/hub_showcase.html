@@ -376,6 +376,7 @@ try{const q=new URLSearchParams(location.search);if(q.has('dev'))localStorage.se
 try{O.dev=localStorage.getItem('nca_dev')==='1'}catch(e){O.dev=false}
 try{const p=ss&&ss.getItem('nca_prof');if(p==='camp'||p==='mp'){O.cur=p;O.chosen=true}}catch(e){}
 try{const q=new URLSearchParams(location.search).get('profile');if(q==='camp'||q==='mp'){O.cur=q;O.chosen=true}}catch(e){}
+O.bootCur=O.cur; /* which profile the page booted with – several modules (net, netui) decide at load time whether multiplayer is on */
 /* transparent key namespacing for the multiplayer profile */
 const key=k=>(O.cur==='mp'&&typeof k==='string'&&k.indexOf('nca_')===0&&!SHARED.test(k))?k+'__mp':k;
 const gI=Storage.prototype.getItem,sI=Storage.prototype.setItem,rI=Storage.prototype.removeItem;
@@ -418,10 +419,19 @@ function show(){if(mm)return;mm=document.createElement('div');mm.id='mainm';mm.a
   else if(a==='set'){try{SET.preload();SET.open()}catch(er){}}
   else if(a==='srv'){const h=b.parentNode,cur=(()=>{try{return localStorage.getItem('nca_server')||(window.NCA_CONFIG&&NCA_CONFIG.server)||''}catch(e){return''}})();h.innerHTML='<div class="row"><input id="mm-si" class="tin" style="flex:1;background:rgba(6,9,26,.9);border:1px solid var(--ln);border-radius:8px;color:#fff;padding:7px 9px;font:600 13px var(--f)" placeholder="wss://your-app.up.railway.app" value="'+cur.replace(/"/g,'')+'"><button class="pb sm" data-a="srvok">Save</button></div>';const i=document.getElementById('mm-si');i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')h.querySelector('[data-a=srvok]').click()};i.focus()}
   else if(a==='srvok'){const v=(document.getElementById('mm-si').value||'').trim();try{if(v)localStorage.setItem('nca_server',v);else localStorage.removeItem('nca_server')}catch(e){}const n=document.getElementById('mm-net');if(n){delete n.dataset.done;n.textContent='Online server: checking…'}document.getElementById('mm-srv').innerHTML='<button class="lnk" data-a="srv">⚙ Server address</button>'}})}
-function go(p){O.choose(p);document.body.classList.remove('mm');if(mm){mm.classList.remove('on');setTimeout(()=>{if(mm){mm.remove();mm=null}},50)}const ld=document.getElementById('loading');if(ld)ld.style.display='';const f=cb;cb=null;if(f)f()}
+function go(p){O.choose(p);
+ /* v15: net.js / netui.js only switch multiplayer on if the page LOADED in the multiplayer profile. Picking it from the menu on a cold load used to boot a half-offline game (no name box, no server) until the player refreshed. So reload once into the chosen profile (it is remembered for the session). */
+ if(p!==O.bootCur){let ok=false;try{ok=!!ss&&ss.getItem('nca_prof')===p}catch(e){}if(ok){const l=document.getElementById('loading');if(l)l.style.display='';location.reload();return}}
+ document.body.classList.remove('mm');if(mm){mm.classList.remove('on');setTimeout(()=>{if(mm){mm.remove();mm=null}},50)}const ld=document.getElementById('loading');if(ld)ld.style.display='';const f=cb;cb=null;if(f)f()}
 /* main.js hands its boot function over; it runs straight away when a profile is already chosen (page reload / ?profile=) */
 O.gate=function(fn){if(O.chosen){fn();return}cb=fn;show()};
 return O})();
+
+/* v15: any click inside the game puts it into full screen if it isn't already (browsers only allow this from a click). Esc leaves it; the next click re-enters. Inside an iframe (Wix embed) the iframe needs allow="fullscreen". */
+(function autoFull(){const de=document.documentElement;let busy=false;
+ const isFull=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
+ const go=()=>{if(busy||isFull())return;const f=de.requestFullscreen||de.webkitRequestFullscreen;if(!f)return;busy=true;try{const r=f.call(de);if(r&&r.catch)r.catch(()=>{}).then?.(()=>{busy=false});else busy=false}catch(e){busy=false}setTimeout(()=>{busy=false},600)};
+ addEventListener('pointerdown',go,true);addEventListener('click',go,true)})();
 
 </script>
 <script>
@@ -714,7 +724,7 @@ function dWall(M,torchOn=true){const g=new THREE.Group();let k=0;for(let r=0;r<4
  g.add(B(Bx(4.1,.3,.9),M.dark,0,3.2,0),B(Bx(4.1,.2,.9),M.dark,0,.1,0),B(Bx(.1,2.4,.04),M.trim,-1.9,1.6,.37),B(Bx(.1,2.4,.04),M.trim,1.9,1.6,.37));if(torchOn)g.add(torch(M,0,1.8,.5));return g}
 function dFloor(M){const g=new THREE.Group();g.add(B(Bx(4,.3,4),M.stone,0,.15,0));for(const[x,z,w,d]of[[0,0,3.4,.05],[0,0,.05,3.4],[0,1.7,3.8,.05],[0,-1.7,3.8,.05]])g.add(B(Bx(w,.04,d),M.trim,x,.32,z));const r=new THREE.Mesh(new THREE.RingGeometry(.5,.62,6),new THREE.MeshBasicMaterial({color:M.p.acc2,side:THREE.DoubleSide,transparent:true,opacity:.9}));r.rotation.x=-Math.PI/2;r.position.y=.34;g.add(r);return g}
 function dDoor(M){const g=new THREE.Group();g.add(B(Bx(1,3.8,1),M.stone,-1.5,1.9,0),B(Bx(1,3.8,1),M.stone,1.5,1.9,0),B(Bx(4,.9,1),M.stone,0,4.2,0),B(Bx(2,3.2,.3),M.wood,0,1.6,0));const ar=new THREE.Mesh(new THREE.TorusGeometry(1,.1,5,16,Math.PI),M.trim);ar.position.set(0,3.2,.2);ar.scale.set(1,.6,1);g.add(ar);for(const y of[.9,2.2])g.add(B(Bx(2,.12,.34),M.metal,0,y,0));g.add(B(Sp(.12,6),M.gold,.55,1.5,.2));g.add(torch(M,-1.5,3,.7),torch(M,1.5,3,.7));return g}
-function spikes(M){const g=new THREE.Group();g.add(B(Bx(3,.2,3),M.dark,0,.1,0));const sp=new THREE.Group();for(let i=0;i<3;i++)for(let j=0;j<3;j++)sp.add(B(Co(.14,.9,5),M.metal,-.9+i*.9,.45,-.9+j*.9));sp.userData.anim=(o,t)=>{const k=(Math.sin(t*2)+1)/2;o.position.y=-.8+k*1.0};g.add(sp);g.add(B(Bx(3.2,.14,3.2),M.trim2,0,.02,0));return g}
+function spikes(M){const g=new THREE.Group();g.add(B(Bx(3,.2,3),M.dark,0,.1,0));const sp=new THREE.Group();for(let i=0;i<3;i++)for(let j=0;j<3;j++)sp.add(B(Co(.14,.9,5),M.metal,-.9+i*.9,.45,-.9+j*.9));sp.userData.anim=(o,t)=>{const k=(Math.sin((t+(window.HZPH||0))*2)+1)/2;o.position.y=-.8+k*1.0};g.add(sp);g.add(B(Bx(3.2,.14,3.2),M.trim2,0,.02,0));return g}
 function chest(M){const g=new THREE.Group();g.add(B(Bx(1.6,.8,1),M.wood,0,.4,0),B(Cy(.5,.5,1.6,10),M.wood,0,.8,0,0,0,Math.PI/2),B(Bx(1.7,.14,1.1),M.gold,0,.76,0),B(Bx(.16,.9,1.12),M.gold,-.5,.5,0),B(Bx(.16,.9,1.12),M.gold,.5,.5,0),B(Bx(.22,.3,.1),M.gold,0,.7,.55));g.add(halo(0xffc94a,3.2,0,.9,0,.55));lightAt(g,0xffc94a,2.4,7,0,.9,0);g.children[g.children.length-1].userData.anim=(o,t)=>{o.material.opacity=.45+.15*Math.sin(t*3)};return g}
 function brazier(M){const g=new THREE.Group();g.add(B(Cy(.5,.2,.2,8),M.stone,0,.1,0),B(Cy(.12,.16,1.2,6),M.dark,0,.8,0),B(Cy(.5,.3,.4,8),M.metal,0,1.5,0));const f=B(Co(.4,.9,6),M.coal,0,2,0);f.userData.anim=(o,t)=>{o.scale.set(1+.12*Math.sin(t*12),1+.2*Math.sin(t*9),1+.12*Math.sin(t*12));};g.add(f);const h=halo(0xff7a2a,4,0,2,0,.75);h.userData.anim=(o,t)=>{o.material.opacity=.6+.2*Math.sin(t*10)};g.add(h);lightAt(g,0xff7a2a,5,14,0,2,0);g.add(emitter('embers',{x:0,y:2.2,z:0,box:[.5,0,.5],h:3.5,n:12,seed:9}));return g}
 function pillar(M){const g=new THREE.Group();g.add(B(Bx(1.4,.4,1.4),M.stone,0,.2,0),B(Cy(.5,.55,3.6,8),M.wall,0,2.2,0),B(Bx(1.3,.4,1.3),M.stone,0,4.2,0),B(Cy(.56,.56,.1,8),M.trim,0,1.1,0),B(Cy(.5,.5,.1,8),M.trim,0,3.3,0));return g}
@@ -1928,7 +1938,8 @@ function applyObjState(){const Q=QSTEPS();
  for(const o of S.objs)if(o.k==='rift'&&Q.some(s=>s.type==='destroy'&&Q.indexOf(s)<PS.i)){const g=RT.inst.get(o.id);if(g)g.visible=false}
  for(const a of ANCH)if(PS.killed[a.o.id]){a.dead=true;a.g.visible=false;RT.hidden.add(a.o.id)}
  buildCols()}
-function beginPlay(o){o=o||{};playOn=true;PS=prog(S.id);if(typeof rwSync==='function')rwSync();clearKitFx();ensureHero();heroG.visible=true;P.act=null;P.dash=null;P.leap=null;P.drawing=0;P.block=0;
+function beginPlay(o){o=o||{};playOn=true;if(typeof NET!=='undefined'&&NET.mp()&&(S.visit||S.mine)&&typeof PROG!=='undefined'&&PROG[S.id])delete PROG[S.id]; /* v15: player-built hubs always start from the owner's saved build – objectives/enemies reset whenever the hub is empty; joiners get the live state from whoever is already inside */
+ PS=prog(S.id);if(typeof rwSync==='function')rwSync();clearKitFx();ensureHero();heroG.visible=true;P.act=null;P.dash=null;P.leap=null;P.drawing=0;P.block=0;
  EG=new THREE.Group();RT.root.add(EG);ENEM=[];ANCH=[];PRJ=[];ORB=[];WAVE=[];TELE=[];ARC=[];bossE=null;nearI=null;
  OB={gates:[],conns:[],chests:[],relics:[],altars:[],cps:[],zones:[],haz:[]};
  for(const ob of S.objs){const c=CATI[ob.k],g=RT.inst.get(ob.id);if(!g)continue;const e={o:ob,g};
@@ -2072,7 +2083,7 @@ function enemyBlock(){if(P.dead||P.dash||P.leap||P.roll>0)return;for(const e of 
   const dx=P.x-e.x,dz=P.z-e.z,R=(P.r||.45)+e.r*.9,d2=dx*dx+dz*dz;if(d2>=R*R)continue;if(P.y>e.y+(e.ly||0)+e.h*.85||e.y+(e.ly||0)>P.y+(P.h||1.8))continue;
   const d=Math.sqrt(d2)||.001,ux=d<.002?Math.sin(P.face+Math.PI):dx/d,uz=d<.002?Math.cos(P.face+Math.PI):dz/d,p={x:e.x+ux*R,z:e.z+uz*R};pushOut(P,p);P.x=p.x;P.z=p.z}}
 function updEnemies(dt){if(typeof ROOMS!=='undefined')ROOMS.update();for(let i=ENEM.length-1;i>=0;i--){const e=ENEM[i];if(e.dead){e.deadT-=dt;const k=Math.max(0,e.deadT/.55);e.g.scale.setScalar(Math.max(.01,e.sc*(.15+.85*k)));e.g.position.y-=dt*.5;if(e.deadT<=0){EG.remove(e.g);ENEM.splice(i,1)}continue}
-  const dp=Math.hypot(P.x-e.x,P.z-e.z);if(dp>70&&!e.boss){e.g.visible=dp<105&&!(typeof ROOMS!=='undefined'&&ROOMS.sleep(e));continue}if(typeof ROOMS!=='undefined'&&ROOMS.on&&!(e.boss&&e.engaged)&&!ROOMS.vis(e.x,e.z,2)){e.g.visible=false;ROOMS.stats.asleep++;continue}e.g.visible=true;
+  const dp=typeof COOP!=='undefined'?COOP.dist(e):Math.hypot(P.x-e.x,P.z-e.z);if(dp>70&&!e.boss){e.g.visible=dp<105&&!(typeof ROOMS!=='undefined'&&ROOMS.sleep(e));continue}if(typeof ROOMS!=='undefined'&&ROOMS.on&&!(e.boss&&e.engaged)&&!ROOMS.vis(e.x,e.z,2)&&!(typeof COOP!=='undefined'&&COOP.keep(e))){e.g.visible=false;ROOMS.stats.asleep++;continue}e.g.visible=true;
   HUB.tick(e.anims,TIME);if((e.ly>0||e.lvy>0)&&!e.boss)juggle(e,dt);else{aiEnemy(e,dt);TGT=null}
   const k=e.flash>0?1+e.flash*1.6:1;e.g.scale.setScalar(e.sc*k)}}
 
@@ -2105,7 +2116,7 @@ function updPlayer(dt){if(P.dead){deathT-=dt;if(deathT<=0)respawn();return}
  P.spd=Math.hypot(P.vx,P.vz);
  const T=RT.terr,th=T.H(P.x,P.z);
  if(P.grounded&&P.y<th+.4){if(T.P(P.x,P.z)===4)voidFall()}
- for(const h of OB.haz){const o=h.o,dx=P.x-o.x,dz=P.z-o.z;if(o.k==='vpool'){if(dx*dx+dz*dz<(2.1*o.s)*(2.1*o.s)&&P.y<th+.5&&P.grounded)voidFall()}else if(Math.abs(dx)<1.5*o.s&&Math.abs(dz)<1.5*o.s&&P.y<th+.8&&(Math.sin(TIME*2)+1)/2>.55)hurtPlayer(12,o.x,o.z,7)}
+ for(const h of OB.haz){const o=h.o,dx=P.x-o.x,dz=P.z-o.z;if(o.k==='vpool'){if(dx*dx+dz*dz<(2.1*o.s)*(2.1*o.s)&&P.y<th+.5&&P.grounded)voidFall()}else if(Math.abs(dx)<1.5*o.s&&Math.abs(dz)<1.5*o.s&&P.y<th+.8&&(Math.sin((TIME+(window.HZPH||0))*2)+1)/2>.55)hurtPlayer(12,o.x,o.z,7)}
  if(P.y<-18)voidFall();
  P.safeT-=dt;if(P.grounded&&P.safeT<=0&&T.P(P.x,P.z)!==4&&P.spd<9.5&&!P.leap&&!P.dash){P.safeT=.25;if(!OB.haz.some(h=>h.o.k==='vpool'&&Math.hypot(P.x-h.o.x,P.z-h.o.z)<3.2*h.o.s))P.safe={x:P.x,y:P.y,z:P.z}}}
 
@@ -2782,19 +2793,19 @@ let vx=Math.sin(f)*o.sp,vz=Math.cos(f)*o.sp,vy=o.vy;
  else{const ob=VX.orb(o.col,o.purple);ob.scale.setScalar(Math.max(.2,o.size*1.05));m.add(ob);m.userData.orb=ob;m.userData.sz=o.size}
  m.position.set(x,y,z);RT.root.add(m);const q={m,x,y,z,vx,vy,vz,o,life:o.life,hit:new Set(),dmg:o.dmg};FPR.push(q);return q}
 function arrow(o){const q=proj(Object.assign({arrow:1,col:glowC(),life:1.3,r:.45,aim:1,y:1.45,fwd:.9},o));sfx(520,.12,'triangle',.04,200);return q}
-function killProj(i,x,y,z){const q=FPR[i];if(typeof DST!=='undefined'&&!q.o.expl&&q.life>0)DST.proj(x,y,z,q.dmg,q.o);RT.root.remove(q.m);q.m.traverse(o=>{if(o.geometry)o.geometry.dispose()});FPR.splice(i,1);if(q.o.expl){slamFx(x,z,q.o.col,q.o.expl*.8);VX.explode(VX.v3(x,Math.max(.4,y),z),q.o.expl*.45,0xff8a30,true);aoe(x,z,q.o.expl,q.o.explDmg||q.dmg,{kb:8,stun:.3,big:1});shake(.35)}else{VX.puff(q.o.arrow?'star':'burst',VX.v3(x,y,z),VX.v3(),.2,.8,2,q.o.col,.9)}sparks.emit(x,y,z,q.o.col,8,4,.22,.35,-3);VX.sparks(VX.v3(x,y,z),q.o.col,5,4,.3,.3)}
+function killProj(i,x,y,z){const q=FPR[i];if(q.vis){RT.root.remove(q.m);q.m.traverse(o=>{if(o.geometry)o.geometry.dispose()});FPR.splice(i,1);if(q.o.expl){slamFx(x,z,q.o.col,q.o.expl*.8);VX.explode(VX.v3(x,Math.max(.4,y),z),q.o.expl*.45,0xff8a30,true)}else VX.puff(q.o.arrow?'star':'burst',VX.v3(x,y,z),VX.v3(),.2,.8,2,q.o.col,.9);sparks.emit(x,y,z,q.o.col,8,4,.22,.35,-3);return}if(typeof DST!=='undefined'&&!q.o.expl&&q.life>0)DST.proj(x,y,z,q.dmg,q.o);RT.root.remove(q.m);q.m.traverse(o=>{if(o.geometry)o.geometry.dispose()});FPR.splice(i,1);if(q.o.expl){slamFx(x,z,q.o.col,q.o.expl*.8);VX.explode(VX.v3(x,Math.max(.4,y),z),q.o.expl*.45,0xff8a30,true);aoe(x,z,q.o.expl,q.o.explDmg||q.dmg,{kb:8,stun:.3,big:1});shake(.35)}else{VX.puff(q.o.arrow?'star':'burst',VX.v3(x,y,z),VX.v3(),.2,.8,2,q.o.col,.9)}sparks.emit(x,y,z,q.o.col,8,4,.22,.35,-3);VX.sparks(VX.v3(x,y,z),q.o.col,5,4,.3,.3)}
 /* swept test: fast, thin projectiles (knives) must not tunnel through a foe on a slow frame */
 function segT(q,x,z){const ax=q.px===undefined?q.x:q.px,az=q.pz===undefined?q.z:q.pz,dx=q.x-ax,dz=q.z-az,l=dx*dx+dz*dz;if(l<1e-6)return 1;return Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/l))}
 function updProj(dt){for(let i=FPR.length-1;i>=0;i--){const q=FPR[i],o=q.o;q.life-=dt;
   if(o.home&&q.life>0){let t=null,bd=1e9;for(const e of ENEM){if(e.dead||(e.boss&&!e.engaged))continue;const d=Math.hypot(e.x-q.x,e.z-q.z);if(d<bd&&d<22){bd=d;t=e}}if(t){const dx=t.x-q.x,dy=t.y+t.h*.55-q.y,dz=t.z-q.z,d=Math.hypot(dx,dy,dz)||1,sp=Math.hypot(q.vx,q.vy,q.vz),k=Math.min(1,dt*o.home);q.vx+=(dx/d*sp-q.vx)*k;q.vy+=(dy/d*sp-q.vy)*k;q.vz+=(dz/d*sp-q.vz)*k}}
   if(o.arrow)q.vy-=4*dt;q.px=q.x;q.py=q.y;q.pz=q.z;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;q.m.position.set(q.x,q.y,q.z);if(o.arrow||o.knife)q.m.lookAt(q.x+q.vx,q.y+q.vy,q.z+q.vz);sparks.emit(q.x,q.y,q.z,o.col,1,.6,.2,.25,0);q.pt=(q.pt||0)-dt;if(q.pt<=0){q.pt=.03;const pp=VX.v3(q.x,q.y,q.z);if(o.arrow)VX.puff('spark',pp,VX.v3(),.25,.35,.1,o.expl?0xff8a30:o.col,.75);else VX.puff('aura',pp,VX.v3((Math.random()-.5)*.6,(Math.random()-.5)*.6,(Math.random()-.5)*.6),.4,(q.m.userData.sz||.3)*6,(q.m.userData.sz||.3)*2,o.col,.5)}if(q.m.userData.orb&&q.m.userData.orb.userData.c)q.m.userData.orb.userData.c.material.rotation+=dt*6;
   let kill=q.life<=0||q.y<RT.terr.H(q.x,q.z)||RT.cols.some(c=>q.y>c.y0&&q.y<c.y1&&c.t<2&&colTop(c,q.x,q.z)!==null);
-  if(!kill){for(const e of ENEM){if(e.dead||(e.boss&&!e.engaged)||q.hit.has(e))continue;const sg=segT(q,e.x,e.z),cx=q.px+(q.x-q.px)*sg,cz=q.pz+(q.z-q.pz)*sg,cy=q.py+(q.y-q.py)*sg;if(Math.hypot(e.x-cx,e.z-cz)<e.r+o.r&&cy>e.y-.3-(o.knife?.5:0)&&cy<e.y+(e.ly||0)+e.h+.3+(o.knife?.6:0)){q.hit.add(e);hitE(e,q.dmg,{dx:q.vx/(Math.hypot(q.vx,q.vz)||1),dz:q.vz/(Math.hypot(q.vx,q.vz)||1),kb:o.kb,big:o.expl>0||!!o.big,arrow:o.arrow,fire:!o.arrow&&!o.knife&&!o.mag,mag:o.mag,stun:o.stun,slow:o.slow,slowT:o.slowT,col:o.col});if(o.onHit)o.onHit(e,q);afterHit(1,{});if(!o.pierce){kill=true;break}}}
+  if(!kill&&!q.vis){for(const e of ENEM){if(e.dead||(e.boss&&!e.engaged)||q.hit.has(e))continue;const sg=segT(q,e.x,e.z),cx=q.px+(q.x-q.px)*sg,cz=q.pz+(q.z-q.pz)*sg,cy=q.py+(q.y-q.py)*sg;if(Math.hypot(e.x-cx,e.z-cz)<e.r+o.r&&cy>e.y-.3-(o.knife?.5:0)&&cy<e.y+(e.ly||0)+e.h+.3+(o.knife?.6:0)){q.hit.add(e);hitE(e,q.dmg,{dx:q.vx/(Math.hypot(q.vx,q.vz)||1),dz:q.vz/(Math.hypot(q.vx,q.vz)||1),kb:o.kb,big:o.expl>0||!!o.big,arrow:o.arrow,fire:!o.arrow&&!o.knife&&!o.mag,mag:o.mag,stun:o.stun,slow:o.slow,slowT:o.slowT,col:o.col});if(o.onHit)o.onHit(e,q);afterHit(1,{});if(!o.pierce){kill=true;break}}}
    if(!kill)for(const a of ANCH){if(a.dead)continue;if(Math.hypot(a.o.x-q.x,a.o.z-q.z)<1.5&&Math.abs(a.g.position.y+2-q.y)<3){hurtAnchor(a,q.dmg);if(!o.pierce)kill=true}}}
   if(kill)killProj(i,q.x,q.y,q.z)}}
 /* zones, meteors, timers */
 function zoneP(o){const y=RT.terr.H(o.x,o.z),m=new THREE.Mesh(new THREE.RingGeometry(o.r-.15,o.r,40),new THREE.MeshBasicMaterial({color:o.col,transparent:true,opacity:.7,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));m.rotation.x=-Math.PI/2;m.position.set(o.x,y+.15,o.z);const f=new THREE.Mesh(new THREE.CircleGeometry(o.r,40),new THREE.MeshBasicMaterial({color:o.col,transparent:true,opacity:.12,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));m.add(f);RT.root.add(m);if(o.drop)VX.circle(o.x,o.z,o.r,o.T,0xffc080,'guard',y);else VX.circle(o.x,o.z,o.r,o.T,o.col,'guard',y);FZ.push(Object.assign({m,t:0,ti:0,y},o))}
-function updZones(dt){for(let i=FZ.length-1;i>=0;i--){const z=FZ[i];z.t+=dt;z.ti+=dt;z.m.material.opacity=.5+.2*Math.sin(z.t*6);if(z.ti>=z.tick){z.ti=0;if(z.drop){const an=Math.random()*6.283,rr=Math.sqrt(Math.random())*z.r*.93,px=z.x+Math.cos(an)*rr,pz=z.z+Math.sin(an)*rr,gy=RT.terr.H(px,pz);VX.puff('spark',VX.v3(px,gy+7,pz),VX.v3(0,-30,0),.23,.6,.35,0xfff0d0,1);sparks.emit(px,gy+6,pz,0xfff0d0,2,1,.2,.2,-30);TMR.push({t:.23,fn:()=>{if(!playOn)return;aoe(px,pz,z.dr||1.3,z.dmg,{kb:3,silent:1});sparks.emit(px,gy+.3,pz,0xffc080,5,3,.22,.25,-3);VX.puff('burst',VX.v3(px,gy+.3,pz),VX.v3(),.25,1,2,0xffc080,.9)}})}else aoe(z.x,z.z,z.r,z.dmg,{kb:0,silent:1});if(z.rain)for(let k=0;k<5;k++){const a=Math.random()*6.283,rr=Math.sqrt(Math.random())*z.r,x=z.x+Math.cos(a)*rr,zz=z.z+Math.sin(a)*rr;sparks.emit(x,z.y+.4,zz,z.col,4,3,.2,.3,-4);sparks.emit(x,z.y+6,zz,z.col,1,1,.2,.18,-30)}}
+function updZones(dt){for(let i=FZ.length-1;i>=0;i--){const z=FZ[i];z.t+=dt;z.ti+=dt;z.m.material.opacity=.5+.2*Math.sin(z.t*6);if(z.ti>=z.tick){z.ti=0;if(z.drop){const an=Math.random()*6.283,rr=Math.sqrt(Math.random())*z.r*.93,px=z.x+Math.cos(an)*rr,pz=z.z+Math.sin(an)*rr,gy=RT.terr.H(px,pz);VX.puff('spark',VX.v3(px,gy+7,pz),VX.v3(0,-30,0),.23,.6,.35,0xfff0d0,1);sparks.emit(px,gy+6,pz,0xfff0d0,2,1,.2,.2,-30);TMR.push({t:.23,fn:()=>{if(!playOn)return;if(!z.vis)aoe(px,pz,z.dr||1.3,z.dmg,{kb:3,silent:1});sparks.emit(px,gy+.3,pz,0xffc080,5,3,.22,.25,-3);VX.puff('burst',VX.v3(px,gy+.3,pz),VX.v3(),.25,1,2,0xffc080,.9)}})}else if(!z.vis)aoe(z.x,z.z,z.r,z.dmg,{kb:0,silent:1});if(z.rain)for(let k=0;k<5;k++){const a=Math.random()*6.283,rr=Math.sqrt(Math.random())*z.r,x=z.x+Math.cos(a)*rr,zz=z.z+Math.sin(a)*rr;sparks.emit(x,z.y+.4,zz,z.col,4,3,.2,.3,-4);sparks.emit(x,z.y+6,zz,z.col,1,1,.2,.18,-30)}}
   if(z.t>=z.T){RT.root.remove(z.m);z.m.geometry.dispose();z.m.material.dispose();FZ.splice(i,1)}}}
 function meteor(x,z){const y=RT.terr.H(x,z);telegraph(x,z,4,.9,null,0xff7a4a);VX.circle(x,z,4,.9,0xffa050,'guard',y);const m=VX.orb(0xff6a20);m.scale.setScalar(1.7);RT.root.add(m);VX.snd('meteorCast');
  FXL.push({t:0,T:.9,upd:k=>{m.position.set(x,y+.5+14*(1-k),z);m.userData.c.material.rotation+=.2;VX.puff('aura',m.position.clone(),VX.v3(0,2,0),.5,4,2,0xff7a20,.7);if(Math.random()<.5)VX.puff('spark',m.position.clone(),VX.v3((Math.random()-.5)*2,1,(Math.random()-.5)*2),.4,.5,.1,0xffc080,1,4)},end:()=>{RT.root.remove(m);if(ABORTING)return;VX.explode(VX.v3(x,y+.6,z),3.4,0xff7a20,true);VX.pillar(x,z,0xff8a40,5,y);slamFx(x,z,0xff7a4a,4);aoe(x,z,4,45*P.mm,{kb:10,stun:1,big:1});shake(.45);HS=Math.max(HS,.08)}})}
@@ -4819,6 +4830,7 @@ const DEF={barrels:{hp:1,parts:1,drop:.4},crates:{hp:1,parts:1,drop:.4},cart:{hp
  bush:{hp:1,nocolR:.9},fbush:{hp:1},fern:{hp:1,nocol:.8},tuft:{hp:1,nocol:.55},flowers:{hp:1,nocol:1},mush:{hp:1,nocol:.7},crystals:{hp:3,crystal:1},
  tree:{hp:4,fall:1.0},oak:{hp:4,fall:1.0},bigpine:{hp:6,fall:1.35},dead:{hp:3,fall:.8}};
 const ROLE={wood:'wood',dark:'wood',bark:'bark',bush:'leaf',leaf:'leaf',moss:'leaf',metal:'metal',gold:'metal',stone:'stone',rock:'stone',wall:'stone',cloth:'cloth',clothA:'cloth',roof:'cloth',paper:'cloth',bone:'bone',crystal:'crystal',flower:'leaf',trim:'metal',trim2:'leaf'};
+let RX=false; /* true while replaying a smash another player made (v15) – no drops, no re-broadcast */
 let T=[],root=null,gone=new Map(),CH=[],grp=null,bx=null,qd=null;const MC=new Map(),V=new THREE.Vector3(),BX=new THREE.Box3();
 const GRAV={crystal:17,wood:17,bark:17,stone:19,metal:18,bone:17,leaf:2.6,cloth:3.2,straw:3};
 const REST={crystal:.4,wood:.32,bark:.25,stone:.2,metal:.45,bone:.3,leaf:0,cloth:0,straw:.1};
@@ -4838,7 +4850,7 @@ function cone(range,arc,dmg,o){if(!active()||!(dmg>0))return 0;sync();const f=P.
 function aoe(x,z,r,dmg,o){if(!active()||!(dmg>0)||(o&&o.silent))return 0;sync();let n=0;for(const t of T){if(t.dead||t.fall||!near(t,x,z,r)||Math.abs(P.y-t.y0)>5)continue;n+=hurt(t,dmg,o,x,z)}return n}
 function line(len,w,dmg,o){if(!active()||!(dmg>0))return 0;sync();const f=P.face,fx=Math.sin(f),fz=Math.cos(f);let n=0;for(const t of T){if(t.dead||t.fall||!inY(t))continue;const dx=t.x-P.x,dz=t.z-P.z,al=dx*fx+dz*fz,pe=Math.abs(dx*fz-dz*fx);if(al<-.5||al>len+t.rad||pe>w/2+t.rad)continue;n+=hurt(t,dmg,o,P.x,P.z)}return n}
 function proj(x,y,z,dmg,o){if(!active()||!(dmg>0))return 0;sync();let n=0;for(const t of T){if(t.dead||t.fall)continue;if(Math.hypot(t.x-x,t.z-z)>t.rad+.35||y<t.y0-.4||y>t.y1+.4)continue;n+=hurt(t,dmg,o,x-(o&&o.dir?Math.sin(o.dir)*2:0),z-(o&&o.dir?Math.cos(o.dir)*2:0))}return n}
-function hurt(t,dmg,o,fx,fz){if(t.cd>0)return 0;t.cd=.2;if(typeof BATCH!=='undefined')BATCH.promote(t.o.id);const hits=(o&&o.big)||dmg>=40?2:1;t.hp-=hits;const dx=t.x-fx,dz=t.z-fz,l=Math.hypot(dx,dz)||1;t.kx=dx/l;t.kz=dz/l;t.wob=.28;t.wd=Math.atan2(dz,dx);
+function hurt(t,dmg,o,fx,fz){if(t.cd>0)return 0;t.cd=.2;if(typeof BATCH!=='undefined')BATCH.promote(t.o.id);const hits=(o&&o.big)||dmg>=40?2:1;t.hp-=hits;if(!RX&&typeof FXN!=='undefined'&&FXN.dst)FXN.dst(T.indexOf(t),hits,fx,fz);const dx=t.x-fx,dz=t.z-fz,l=Math.hypot(dx,dz)||1;t.kx=dx/l;t.kz=dz/l;t.wob=.28;t.wd=Math.atan2(dz,dx);
  const D=t.D,src=t.part||t.g,comp=mainComp(src,D);
  if(t.hp<=0){destroy(t,comp);return 1}
  chips(src,t,D);try{IMP.chip(comp,t.x,t.z,1)}catch(e){}if(typeof HS!=='undefined')HS=Math.max(HS,.035);return 1}
@@ -4881,7 +4893,7 @@ function destroy(t,comp){t.dead=true;const D=t.D,src=t.part||t.g;
 function finish(t,src,comp){const D=t.D,r=shatter(src,t,{});const cs=comps(src,D);src.visible=false;let lit=false;src.traverse(n=>{if(n.userData&&n.userData.light){n.userData._light=n.userData.light;n.userData.light=null;lit=true}});if(lit)try{lightPool.set(RT.root)}catch(e){}if(r){for(const c of cs)dust(r,c,c==='leaf'?18:c===comp?30:14,true)}
  try{IMP.brk(cs,D.fall?1.6:t.rad>1?1.2:.9,t.x,t.z,!!D.fall)}catch(e){}
  if(typeof CY!=='undefined')CY.shake=Math.max(CY.shake,D.fall?.45:.22);if(typeof HS!=='undefined')HS=Math.max(HS,.06);
- if(D.crystal)crystalDrop(t);else if(D.drop&&Math.random()<D.drop&&typeof dropOrb==='function')dropOrb(t.x,t.z)}
+ if(RX){}else if(D.crystal)crystalDrop(t);else if(D.drop&&Math.random()<D.drop&&typeof dropOrb==='function')dropOrb(t.x,t.z)}
 /* crystals give back a little: a health orb, an XP orb and a star orb that burst out and drift to you */
 function crystalDrop(t){if(typeof dropOrb!=='function')return;const T=(typeof tierOf==='function'&&S)?tierOf(S):1,y=t.y0+.9;
  dropOrb(t.x,t.z,'hp',{a:Math.max(8,Math.round(P.max*.07)),y});dropOrb(t.x,t.z,'xp',{a:8+5*T,y});dropOrb(t.x,t.z,'st',{a:Math.random()<.3?2:1,y});if(Math.random()<.5)dropOrb(t.x,t.z,'xp',{a:6+3*T,y})}
@@ -4899,7 +4911,7 @@ function update(dt){if(!root)return;
    m.position.x+=c.vx*dt;m.position.y+=c.vy*dt;m.position.z+=c.vz*dt;m.rotation.x+=c.sx*dt;m.rotation.y+=c.sy*dt;m.rotation.z+=c.sz*dt;
    const gy=RT.terr.H(m.position.x,m.position.z)+c.half;if(m.position.y<gy){m.position.y=gy;const rs=REST[c.comp]||0;if(c.vy<-1.4&&rs>0){c.vy=-c.vy*rs;c.vx*=.65;c.vz*=.65;c.sx*=.5;c.sy*=.5;c.sz*=.5}else{c.vy=0;c.vx*=Math.exp(-dt*9);c.vz*=Math.exp(-dt*9);c.sx*=.8;c.sy*=.8;c.sz*=.8;if(Math.hypot(c.vx,c.vz)<.25)c.rest=true}}}
   else{m.rotation.x*=1-Math.min(1,dt*6);m.rotation.z*=1-Math.min(1,dt*6)}}}
-return{cone,aoe,line,proj,update,skip,sync,resync:()=>{root=null;sync()},active,T:()=>T,DEF,get chunks(){return CH.length}}})();
+return{remote:(i,hits,fx,fz)=>{if(!active())return;sync();const t=T[i];if(!t||t.dead||t.fall)return;RX=true;try{t.cd=0;hurt(t,hits>1?99:1,{big:hits>1},fx,fz)}finally{RX=false}},cone,aoe,line,proj,update,skip,sync,resync:()=>{root=null;sync()},active,T:()=>T,DEF,get chunks(){return CH.length}}})();
 
 </script>
 <script>
@@ -5315,7 +5327,7 @@ function build(){const q=O.q,pre=Object.keys(PRE).find(k=>PRE[k].res===q.res&&PR
 function render(){if(!ovEl)return;$$('.sm-tabs',ovEl).innerHTML=Object.keys(TABS).map(k=>`<button data-t="${k}" class="${k===tab?'on':''}">${TABS[k]}</button>`).join('');const b=$$('.sm-body',ovEl),st=b.scrollTop;b.innerHTML=build();b.scrollTop=st;live()}
 function live(){const el=document.getElementById('sm-live');if(!el)return;const e=eff();el.innerHTML=(O.q.auto?`Quality level <b style="color:var(--cy)">${LAD.length-1-O.lvl}/${LAD.length-1}</b> · `:'Auto off · ')+`${fps|0} fps · render ${Math.round(e.res*100)}% · ${e.ms?e.ms+'× AA':'no AA'} · ${e.sh?e.sh+' shadows':'no shadows'} · view ${e.vd} m`}
 function mkUI(){if(ovEl)return;ovEl=document.createElement('div');ovEl.id='setm';ovEl.className='uiov';ovEl.innerHTML='<div class="sm-box"><div class="sm-h"><h2>SETTINGS</h2><button class="pb sm ghost" data-a="close">✕ Close</button></div><div class="sm-tabs"></div><div class="sm-body"></div><div class="sm-f"><span>Settings are saved in this browser automatically.</span><button class="pb sm ghost" data-a="reset">Reset all</button></div></div>';document.body.appendChild(ovEl);
- pmEl=document.createElement('div');pmEl.id='pausem';pmEl.className='uiov';pmEl.innerHTML='<div class="pm-box"><h2>PAUSED</h2><div style="font-size:11px;letter-spacing:.1em;opacity:.55;margin:-6px 0 8px">Build 2026-11-21 00:41 ET</div><button class="pb" data-a="resume">▶ Resume</button><button class="pb ghost" data-a="settings">⚙ Settings</button><button class="pb ghost" data-a="chapters">📖 Chapters</button><button class="pb ghost" data-a="tut">❓ Tutorial</button><button class="pb ghost" data-a="mainmenu">🏠 Main menu</button><button class="pb ghost" data-a="tutskip" id="pm-skip" style="display:none">⏭ Skip current tutorial</button></div>';document.body.appendChild(pmEl);
+ pmEl=document.createElement('div');pmEl.id='pausem';pmEl.className='uiov';pmEl.innerHTML='<div class="pm-box"><h2>PAUSED</h2><div style="font-size:11px;letter-spacing:.1em;opacity:.55;margin:-6px 0 8px">Build 2026-11-21 20:08 ET</div><button class="pb" data-a="resume">▶ Resume</button><button class="pb ghost" data-a="settings">⚙ Settings</button><button class="pb ghost" data-a="chapters">📖 Chapters</button><button class="pb ghost" data-a="tut">❓ Tutorial</button><button class="pb ghost" data-a="mainmenu">🏠 Main menu</button><button class="pb ghost" data-a="tutskip" id="pm-skip" style="display:none">⏭ Skip current tutorial</button></div>';document.body.appendChild(pmEl);
  gear=document.createElement('button');gear.id='gear';gear.title='Settings';gear.textContent='⚙';document.body.appendChild(gear);gear.onclick=()=>{O.open()};
  ovEl.addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t){tab=t.dataset.t;render();return}
   const a=e.target.closest('[data-a]');if(a){const x=a.dataset.a;if(x==='close')O.close();else if(x==='test'){try{snd('hit');sfx(660,.15,'triangle',.06)}catch(er){}}else if(x==='tut'){O.close();O.pauseOff();if(typeof TUT!=='undefined')TUT.start(true)}else if(x==='reset')O.reset();return}
@@ -5412,7 +5424,7 @@ addEventListener('keydown',e=>{if(!O.on)return;if(card&&card.classList.contains(
 addEventListener('mousedown',e=>{if(O.on&&e.button===2)seen.block=1},true);
 setInterval(()=>{
  /* auto-start: first time a champion is chosen and the hub is loaded */
- if(!O.on&&!O.declined&&!flag()&&typeof playOn!=='undefined'&&playOn&&MODE==='play'&&S&&S.id==='hub'&&!transition&&!P.dead){try{if(heroPicked()&&!MGC.ui())O.start(false)}catch(e){}}
+ if(!O.on&&!O.declined&&!flag()&&typeof playOn!=='undefined'&&playOn&&MODE==='play'&&S&&S.id==='hub'&&!transition&&!P.dead&&!(typeof NET!=='undefined'&&NET.waiting&&NET.waiting())){try{if(heroPicked()&&!MGC.ui())O.start(false)}catch(e){}}
  if(!O.on)return;const s=STEPS[O.i];if(!s||s.card)return;
  if(P.roll>0)seen.roll=1;if(P.block)seen.block=1;
  try{for(const a of KIT().ab)if((P.cd[a.id]||0)>.05)seen.ab.add(a.id)}catch(e){}
@@ -5485,7 +5497,7 @@ addEventListener('keydown',e=>{if(e.code==='F8'){dbgOn=!dbgOn;e.preventDefault()
 function dbgUpdate(){if(!dbgOn)return;const n=performance.now();if(n-dbgT<90)return;dbgT=n;
  if(!dbgEl){dbgEl=document.createElement('div');dbgEl.style.cssText='position:fixed;left:8px;bottom:120px;z-index:99999;background:rgba(0,0,0,.72);color:#9fffd8;font:11px/1.35 monospace;padding:6px 9px;border:1px solid #3a6;border-radius:6px;pointer-events:none;white-space:pre';document.body.appendChild(dbgEl)}
  dbgEl.style.display='block';const a=P.act;
- dbgEl.textContent='WALL JUMP  (F8 hides)\nhero  '+Hero.key+'  tier '+O.tier()+'\non wall  '+(st?'yes t='+st.t.toFixed(2):'no')+'\ngrounded '+P.grounded+'   air '+air.toFixed(2)+'\ncooldown '+cd.toFixed(2)+'   chain '+chain+'\nlast jump press: '+(O.why||'-')+'\nact '+(a?(a.id||a.clip||'yes'):'-')+'  dash '+(!!P.dash)+'  leap '+(!!P.leap)+'  roll '+(P.roll>0)+'\nwjT '+(P.wjT||0).toFixed(2)+'  flipT '+flipT.toFixed(2)+'  hp '+Math.round(P.hp)+'\nrig  legs '+(P.pose?P.pose.rl.toFixed(2):'-')+'  rootX '+((typeof HR!=='undefined'&&HR&&HR.root)?HR.root.rotation.x.toFixed(2):'-')+'  enforced '+enfN+'\nlast fix  '+lastFix+'\nguard fixes  kick '+O.fixes.kick+'  launch '+O.fixes.launch+'  run '+O.fixes.run+'  slide '+O.fixes.slide+'  flip '+O.fixes.flip+'\n'+EVL.slice().reverse().join('\n')+'\nbuild 2026-11-21 00:41 ET'}
+ dbgEl.textContent='WALL JUMP  (F8 hides)\nhero  '+Hero.key+'  tier '+O.tier()+'\non wall  '+(st?'yes t='+st.t.toFixed(2):'no')+'\ngrounded '+P.grounded+'   air '+air.toFixed(2)+'\ncooldown '+cd.toFixed(2)+'   chain '+chain+'\nlast jump press: '+(O.why||'-')+'\nact '+(a?(a.id||a.clip||'yes'):'-')+'  dash '+(!!P.dash)+'  leap '+(!!P.leap)+'  roll '+(P.roll>0)+'\nwjT '+(P.wjT||0).toFixed(2)+'  flipT '+flipT.toFixed(2)+'  hp '+Math.round(P.hp)+'\nrig  legs '+(P.pose?P.pose.rl.toFixed(2):'-')+'  rootX '+((typeof HR!=='undefined'&&HR&&HR.root)?HR.root.rotation.x.toFixed(2):'-')+'  enforced '+enfN+'\nlast fix  '+lastFix+'\nguard fixes  kick '+O.fixes.kick+'  launch '+O.fixes.launch+'  run '+O.fixes.run+'  slide '+O.fixes.slide+'  flip '+O.fixes.flip+'\n'+EVL.slice().reverse().join('\n')+'\nbuild 2026-11-21 20:08 ET'}
 /* ---------- called before moveActor: trigger the kick ---------- */
 let warmed=false;
 function warm(){if(warmed)return;warmed=true;try{if(!ringGeo)ringGeo=new THREE.RingGeometry(.55,.72,40);const m=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false}),o=new THREE.Mesh(ringGeo,m);o.position.set(0,-900,0);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:ghTexture(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));sp.position.set(0,-900,0);SC.add(o,sp);R.compile(SC,CAM);SC.remove(o,sp);m.dispose();sp.material.dispose()}catch(e){}}
@@ -6173,11 +6185,11 @@ return O})();
    (Root cause of the original bug: objectives counted the *unscaled* spawner size while Easy / Hard spawn a scaled pack - see stepDone in play.js.) */
 const RESCUE=(()=>{
 const O={fixed:0,placed:0,log:[]};let sid=null,t0=0,tk=0;
-function audit(){if(typeof S==='undefined'||!S||!S.quest||typeof PS==='undefined'||PS.done)return;const s=S.quest.steps[PS.i];if(!s||s.type!=='kill')return;let n=0;
+function audit(){if(typeof COOP!=='undefined'&&COOP.guest())return;if(typeof S==='undefined'||!S||!S.quest||typeof PS==='undefined'||PS.done)return;const s=S.quest.steps[PS.i];if(!s||s.type!=='kill')return;let n=0;
  for(const o of S.objs){const c=CATI[o.k];if(!c||c.ent!=='spawner'||o.d.tag!==s.tag)continue;const cnt=typeof DIFF!=='undefined'?DIFF.count(o.d.count||1):(o.d.count||1);
   for(let i=0;i<cnt;i++){const key=o.id+':'+i;if(PS.killed[key])continue;if(ENEM.some(e=>e.key===key))continue;PS.killed[key]=o.d.tag||1;n++}}
  if(n){O.fixed+=n;O.log.push(['quest',S.id,s.id,n]);console.warn('[rescue] counted',n,'missing foe(s) as cleared for',s.id);try{evalQuest()}catch(e){}}}
-function place(only){let n=0;for(const e of (only?[only]:ENEM)){if(e.dead||e.boss||e.fly||e.ly>0||e.lvy>0||!e.key||e.noRescue)continue;const H=RT.terr.H(e.x,e.z);
+function place(only){if(typeof COOP!=='undefined'&&COOP.guest())return;let n=0;for(const e of (only?[only]:ENEM)){if(e.dead||e.boss||e.fly||e.ly>0||e.lvy>0||!e.key||e.noRescue)continue;const H=RT.terr.H(e.x,e.z);
   const under=e.y<H-3,inside=typeof blockedS==='function'&&blockedS(e.x,e.y+.7,e.z);if(!under&&!inside)continue;
   let ok=false;for(let r=1.6;r<=9&&!ok;r+=1.4)for(let a=0;a<12;a++){const x=e.x+Math.sin(a*.5236)*r,z=e.z+Math.cos(a*.5236)*r,h=RT.terr.H(x,z);
    if(typeof blockedS==='function'&&(blockedS(x,h+.7,z)||blockedS(x,h+1.7,z)||blockedS(x,h+.3,z)))continue;e.x=x;e.z=z;e.y=h+.05;e.vy=0;e.kx=e.kz=0;ok=true;break}
@@ -6193,7 +6205,7 @@ return O})();
 <script>
 /* ============ SPW · living spawners for player-built hubs ============
    * Player-built scenes (own hub, and other players' hubs you visit): every playtest / visit starts from a clean slate – kills are never saved, so
-     everything is back the next time you enter (killed foes respawn; enemies are simulated per player, so a visitor never changes another player's copy).
+     everything is back the next time you enter (killed foes respawn; in a shared room the host simulates them for everyone, see coop.js).
    * Enemy spawners (max 5 foes) and boss spawners are drawn as the big rift crystal and keep respawning their foes: each dead foe returns after the
      spawner's respawn time (minimum 5 s, players can raise it; default 10 s, boss 60 s).
    * Creatures placed from the palette are live foes in playtest (they used to stand there like statues): the prop is replaced by a real enemy of the same
@@ -6214,7 +6226,7 @@ O.build=function(){O.slots=[];O.on=false;if(!S||!S.mine||typeof RT==='undefined'
    const e=spawnEnemy(ob.k,ob.x,ob.z,'prop',key);if(e&&typeof ob.r==='number')e.f=ob.r;
    O.slots.push({ob,kind:ob.k,key,rad:0,rt:bossK?60:10,boss:bossK,e:e||null,t:e?0:10,tag:'prop',prop:1,r:ob.r})}}
  if(hide){try{buildCols()}catch(e){}}O.on=O.slots.length>0};
-O.tick=function(dt){if(!O.on||typeof playOn==='undefined'||!playOn||!S||!S.mine||window.__pause)return;
+O.tick=function(dt){if(typeof COOP!=='undefined'&&COOP.guest())return;if(!O.on||typeof playOn==='undefined'||!playOn||!S||!S.mine||window.__pause)return;
  for(const s of O.slots){if(s.e){if(alive(s.e))continue;s.e=null;s.t=s.rt}
   s.t-=dt;if(s.t>0)continue;if(ENEM.length>=O.MAXLIVE){s.t=2;continue}
   const[x,z]=pt(s.ob,s.rad);try{delete PS.killed[s.key]}catch(e){}
@@ -6459,10 +6471,11 @@ return O})();
    Configure the server once:   window.NCA_CONFIG={server:'wss://your-app.up.railway.app'}   (see index wrapper / README),
    or for testing add ?server=ws://localhost:8080 to the page URL (remembered).
    Everything the player sees here is *presentation + social*: other champions walking around the hub, chat, parties, guilds, leaderboards.
-   Enemies and combat are simulated locally by every client (they are not shared). */
+   Enemies: in party instances and visited hubs one member (the host, picked by the server) simulates the foes and everyone else sees / fights the same ones (see coop.js). */
 const NET=(()=>{
 const CFG=window.NCA_CONFIG||{};
 const O={on:false,authed:false,ws:null,me:null,room:null,roomCount:0,cap:50,friends:[],frReq:[],party:null,guild:null,quests:null,invites:[],aim:null,remote:new Map(),h:{},status:'off',err:'',perks:{xp:0,star:0,hp:0,pm:0,cap:10},dirtySave:false,wix:null,icons:['⚔'],caps:{}};
+O.host=null;
 O.mp=()=>typeof PROF!=='undefined'&&PROF.cur==='mp';
 const gI=Storage.prototype.getItem,sI=Storage.prototype.setItem;
 const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}};
@@ -6477,18 +6490,27 @@ const setAcct=a=>ls('nca_acct',a?JSON.stringify(a):null);
 O.acct=acct;
 const myPal=()=>{try{return palFor(Hero.key)}catch(e){return{}}};
 /* ---------------- connection ---------------- */
-let tries=0,rt=null,name=null,wantName=null,closing=false;
+let tries=0,rt=null,rtOn=false,name=null,wantName=null,closing=false;O.offlineChoice=false;O.t0=performance.now();
 O.start=function(){if(!O.mp()||O.on)return;O.on=true;
  if(!O.url()){O.status='noserver';O.emit('status');return}
  const a=acct();if(a&&a.token){name=a.name;connect()}else if(O.wix&&O.wix.id){connect()}else O.emit('needname')};
-O.signIn=function(n){wantName=n;name=n;if(!O.ws||O.ws.readyState>1)connect();else hello()};
-function connect(){clearTimeout(rt);const u=O.url();if(!u)return;O.status=tries?'reconnecting':'connecting';O.emit('status');
+O.signIn=function(n,pw){wantName=n;name=n;O._pw=pw||'';if(pw){const a=acct();if(a&&a.token&&(a.name||'').toLowerCase()!==String(n).toLowerCase())setAcct(null)}if(!O.ws||O.ws.readyState>1)connect();else hello()};
+/* v15: always end up in the shared server — never sit offline waiting for a page refresh.
+   ensure(true) = the player asked (e.g. pressed E on a guild-hub door); ensure() = background watchdog. */
+O.waiting=()=>O.mp()&&!!O.url()&&!O.authed&&!O.offlineChoice&&tries<3;
+O.ensure=function(user){if(!O.mp()||!O.url()||O.authed)return false;if(O.ws&&O.ws.readyState<=1&&!user)return true;
+ if(!user&&(O.offlineChoice||rtOn||O.err==='kicked'||O.status==='denied'))return false;
+ if(O.ws&&O.ws.readyState<=1)return true;
+ O.on=true;O.offlineChoice=false;O.err='';closing=false;tries=0;const a=acct();
+ if(a&&a.token){name=a.name;connect()}else if(O.wix&&O.wix.id)connect();else if(!(typeof NETUI!=='undefined'&&NETUI.isOpen&&NETUI.isOpen('nameq')))O.emit('needname');return true};
+setInterval(()=>{if(O.mp()&&O.on)O.ensure(false)},4000);
+function connect(){clearTimeout(rt);rtOn=false;O.offlineChoice=false;const u=O.url();if(!u)return;O.status=tries?'reconnecting':'connecting';O.emit('status');
  let ws;try{ws=new WebSocket(u)}catch(e){O.status='offline';O.emit('status');return}
- O.ws=ws;ws.onopen=()=>{tries=0;hello()};
+ O.ws=ws;ws.onopen=()=>{tries=0;hello();O.send({t:'ping',ts:performance.now()})};
  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch(e){return}onMsg(m)};
- ws.onclose=()=>{O.authed=false;clearRemotes();if(O.ws===ws)O.ws=null;if(closing)return;O.status=O.err?'denied':'offline';O.emit('status');if(O.err==='kicked')return;tries++;rt=setTimeout(connect,Math.min(15000,1000*Math.pow(1.7,tries)))};
+ ws.onclose=()=>{O.authed=false;O.host=null;O.emit('host',{id:null});clearRemotes();if(O.ws===ws)O.ws=null;if(closing)return;O.status=O.err?'denied':'offline';O.emit('status');if(O.err==='kicked')return;tries++;rtOn=true;rt=setTimeout(connect,Math.min(15000,1000*Math.pow(1.7,tries)))};
  ws.onerror=()=>{}}
-function hello(){const a=acct();const m={t:'hello',name:(a&&a.name)||name||wantName||'',hero:Hero.key,pal:myPal(),pr:typeof PRES!=='undefined'?PRES.of(Hero.key):0};if(a&&a.token)m.token=a.token;if(O.wix&&O.wix.id)m.wix=O.wix;O.send(m)}
+function hello(){const a=acct();const m={t:'hello',name:(a&&a.name)||name||wantName||'',hero:Hero.key,pal:myPal(),pr:typeof PRES!=='undefined'?PRES.of(Hero.key):0};if(a&&a.token)m.token=a.token;if(O.recovering)m.recover=true;if(O._pw){m.pw=O._pw;m.newpw=O._pw}if(O.wix&&O.wix.id)m.wix=O.wix;O.send(m)}
 O.relogin=hello;
 /* ---------------- stars: the server holds the real balance in multiplayer ---------------- */
 if(O.mp()){let raw=PROG._stars|0;delete PROG._stars;let silent=false;
@@ -6496,14 +6518,18 @@ if(O.mp()){let raw=PROG._stars|0;delete PROG._stars;let silent=false;
  O.setStars=v=>{silent=true;raw=Math.max(0,v|0);silent=false;try{updateHud();ECON.sync(true)}catch(e){}}}else O.setStars=()=>{};
 /* ---------------- incoming ---------------- */
 function onMsg(m){switch(m.t){
- case'welcome':O.authed=true;O.err='';O.me={id:m.id,name:m.name};O.profile=m.profile;O.quests=m.quests;O.guild=m.guild;O.invites=[];O.icons=m.icons||O.icons;O.caps=m.caps||{};O.devGrant=m.devGrant;O.lvTable=m.lvTable;O.wixLinked=m.wix;
+ case'welcome':O.authed=true;O.err='';O.me={id:m.id,name:m.name};O.profile=m.profile;O.quests=m.quests;O.guild=m.guild;O.invites=[];O.icons=m.icons||O.icons;O.caps=m.caps||{};O.devGrant=m.devGrant;O.lvTable=m.lvTable;O.wixLinked=m.wix;O.hasPw=!!m.hasPw;O._pw='';O.recovering=false;
   if(m.token)setAcct({name:m.name,token:m.token});else{const a=acct();if(!a||a.name!==m.name)setAcct({name:m.name,token:a&&a.token})}
   O.setStars(m.stars);perks();O.status='online';O.emit('status');O.emit('welcome',m);
   for(const i of m.invites||[])O.emit('invite',{kind:'guild',from:i.from,fromName:i.from,guild:i.guild,guildName:i.name});
   O.joinCurrent();O.statSoon(500);cloudCheck(m);break;
- case'denied':O.err=m.text;O.authed=false;O.status='denied';O.emit('denied',m);break;
+ case'denied':if(O.recovering){m.rk=1;O.recovering=false;try{const a=acct();if(a&&!a.name)setAcct(null)}catch(e){}}O.err=m.text;O.authed=false;O.status='denied';O.emit('denied',m);break;
  case'kicked':O.err='kicked';O.status='kicked';O.emit('status');toast('<b>'+esc(m.text||'Signed in elsewhere')+'</b>','bad');break;
- case'room':O.room=m.room;O.roomCount=m.count||1;O.cap=m.cap||50;clearRemotes();for(const p of m.players||[])addRemote(p);O.emit('room',m);break;
+ case'room':O.host=m.host||null;O.room=m.room;O.roomCount=m.count||1;O.cap=m.cap||50;clearRemotes();for(const p of m.players||[])addRemote(p);O.emit('room',m);break;
+ case'host':O.host=m.id||null;O.emit('host',m);break;
+ case'pong':if(typeof m.now==='number'&&typeof m.ts==='number'){const rtt=performance.now()-m.ts;O.clockOff=m.now+rtt/2-Date.now();O.emit('clock')}break;
+ case'co':O.emit('co',m);break;
+ case'fx':O.emit('fx',m);break;
  case'join':if(m.p&&m.p.id!==(O.me&&O.me.id)){addRemote(m.p);O.roomCount++;O.emit('room',{})}break;
  case'leave':dropRemote(m.id);O.roomCount=Math.max(1,O.roomCount-1);O.emit('room',{});break;
  case'appear':if(m.p)setAppear(m.p);break;
@@ -6518,7 +6544,7 @@ function onMsg(m){switch(m.t){
  case'invite':O.invites.push(Object.assign({t:Date.now()},m));O.emit('invite',m);break;
  case'ready':case'ready_state':case'ready_end':case'go':O.emit(m.t,m);break;
  case'guild':O.guild=m.guild;perks();if(m.why)toast(esc(m.why));O.emit('guild',m);break;
- case'guilds':case'lb':case'profile':case'hubdata':case'hubpub':case'savedata':case'saved':O.emit(m.t,m);break;
+ case'guilds':case'lb':case'profile':case'hubdata':case'hubpub':case'savedata':case'saved':case'atlas':case'pwset':O.emit(m.t,m);break;
  case'presence':break;
 }}
 function perks(){const L=O.guild?O.guild.perks:null;O.perks=L||{xp:0,star:0,hp:0,pm:0,cap:10}}
@@ -6529,23 +6555,28 @@ O.joinCurrent=function(){if(!O.authed||typeof S==='undefined'||!S)return;
  else if(S.mine){O.send({t:'join',scene:id,inst:'h:'+O.me.id+':'+id})}
  else if(O.inst&&O.inst.scene===id){O.send({t:'join',scene:id,inst:O.inst.key})}
  else{O.inst=null;O.send({t:'join',scene:id})}};
-function Hooks_chain(){const f=Hooks.onLoad;Hooks.onLoad=function(o){f(o);if(O.mp()){clearRemotes();O.joinCurrent();O.emit('scene')}}}
+function Hooks_chain(){const f=Hooks.onLoad;Hooks.onLoad=function(o){f(o);if(O.mp()){clearRemotes();if(O.authed)O.joinCurrent();else O.ensure(false);O.emit('scene')}}}
 /* ---------------- remote avatars ---------------- */
 const R=O.remote;let nowT=0;
 const MAXVIS=16,SHOWD=60;
-function mkTag(txt,col,sub){const c=document.createElement('canvas');c.width=320;c.height=84;const x=c.getContext('2d');x.textAlign='center';x.lineJoin='round';
+function drawTag(c,txt,col,sub,hp){const x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);x.textAlign='center';x.lineJoin='round';
  x.font='800 30px system-ui,Segoe UI,Arial';x.lineWidth=7;x.strokeStyle='rgba(0,0,0,.88)';x.strokeText(txt,160,38);x.fillStyle=col||'#fff';x.fillText(txt,160,38);
  if(sub){x.font='700 21px system-ui,Segoe UI,Arial';x.lineWidth=5;x.strokeText(sub,160,68);x.fillStyle='#bfc6ff';x.fillText(sub,160,68)}
- const t=new THREE.CanvasTexture(c);t.minFilter=THREE.LinearFilter;const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,depthTest:false}));sp.scale.set(2.6,.68,1);sp.userData.noOutline=1;sp.userData.noPick=1;sp.renderOrder=20;return sp}
+ if(hp!=null){const w=200,h=9,x0=60,y0=73;x.fillStyle='rgba(0,0,0,.85)';x.fillRect(x0-2,y0-2,w+4,h+4);x.fillStyle='#3a1218';x.fillRect(x0,y0,w,h);const k=Math.max(0,Math.min(1,hp/100));x.fillStyle=k>.5?'#5dff9a':k>.25?'#ffd24a':'#ff4a5a';x.fillRect(x0,y0,w*k,h)}}
+function mkTag(txt,col,sub,hp){const c=document.createElement('canvas');c.width=320;c.height=84;drawTag(c,txt,col,sub,hp);
+ const t=new THREE.CanvasTexture(c);t.minFilter=THREE.LinearFilter;const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,depthTest:false}));sp.scale.set(2.6,.68,1);sp.userData.noOutline=1;sp.userData.noPick=1;sp.renderOrder=20;sp.userData.cv=c;return sp}
+const tagSub=a=>(a.tag?'['+a.tag+'] ':'')+(a.pr&&typeof PRES!=='undefined'?PRES.glyph(a.pr)+a.pr+' · ':'')+'Lv '+(a.lv||1);
+const inParty=id=>!!(O.party&&O.party.members.some(m=>m.id===id));
+function refreshTag(r){if(!r.tag)return;const pm=inParty(r.id),k=(pm?1:0)+'|'+Math.round((r.h==null?100:r.h)/5)+'|'+tagColor(r.a);if(k===r.tagKey)return;r.tagKey=k;drawTag(r.tag.userData.cv,r.a.name,tagColor(r.a),tagSub(r.a),pm?(r.h==null?100:r.h):null);r.tag.material.map.needsUpdate=true}
 function tagColor(a){if(O.party&&O.party.members.some(m=>m.id===a.id))return'#7be7ff';if(O.friends.some(f=>f.id===a.id))return'#ffd76a';if(O.guild&&O.guild.members&&O.guild.members.some(m=>m.id===a.id))return'#8dff9c';return'#ffffff'}
 function addRemote(a){if(!a||!a.id||(O.me&&a.id===O.me.id))return;dropRemote(a.id);const r={id:a.id,a,g:null,tag:null,x:a.x||0,y:a.y||0,z:a.z||0,f:a.f||0,tx:a.x||0,ty:a.y||0,tz:a.z||0,tf:a.f||0,s:a.s||0,fl:a.a||0,k:a.k||'',u:a.u||0,anim:Math.random()*6,pose:null,vis:false,bub:null};R.set(a.id,r)}
 function setAppear(a){const r=R.get(a.id);if(!r)return;const heroChanged=r.a.hero!==a.hero;r.a=Object.assign(r.a,a);if(r.aura){PRES.remove(r.aura);r.aura=null}if(r.g){SC.remove(r.g);HUB.disposeTree(r.g);r.g=null}if(r.tag){SC.remove(r.tag);r.tag.material.map.dispose();r.tag.material.dispose();r.tag=null}r.pose=null}
 function dropRemote(id){const r=R.get(id);if(!r)return;if(r.aura){PRES.remove(r.aura);r.aura=null}if(r.g){SC.remove(r.g);HUB.disposeTree(r.g)}if(r.tag){SC.remove(r.tag);r.tag.material.map.dispose();r.tag.material.dispose()}if(r.bub)killBub(r.bub);R.delete(id)}
 function clearRemotes(){for(const id of[...R.keys()])dropRemote(id);O.aim=null}
-function snapRemote(a){const r=R.get(a[0]);if(!r)return;r.tx=a[1];r.ty=a[2];r.tz=a[3];r.tf=a[4];r.s=a[5];r.fl=a[6];r.k=a[7]||'';r.u=a[8]||0}
+function snapRemote(a){const r=R.get(a[0]);if(!r)return;r.tx=a[1];r.ty=a[2];r.tz=a[3];r.tf=a[4];r.s=a[5];r.fl=a[6];r.k=a[7]||'';r.u=a[8]||0;if(a[9]!==undefined)r.h=a[9]}
 function build(r){const a=r.a,key=KITS[a.hero]?a.hero:'starr';const pal=Object.assign(palFor(key),a.pal||{});const g=buildChar(key,pal);g.userData.rig&&(r.rig=g.userData.rig);g.userData.anims=HUB.collect(g);try{HUB.outlineify(g)}catch(e){}
  r.key=key;r.st=Object.assign(PZ(),STANCE[key]||{});r.pose=Object.assign({},r.st);r.g=g;SC.add(g);g.position.set(r.x,r.y,r.z);
- const hgt=(g.userData.hgt||1.9)+.55;r.hgt=hgt;r.tag=mkTag(a.name,tagColor(a),(a.tag?'['+a.tag+'] ':'')+(a.pr&&typeof PRES!=='undefined'?PRES.glyph(a.pr)+a.pr+' · ':'')+'Lv '+(a.lv||1));SC.add(r.tag);if(a.pr&&typeof PRES!=='undefined')r.aura=PRES.aura(g,a.pr,{remote:1})}
+ const hgt=(g.userData.hgt||1.9)+.55;r.hgt=hgt;r.tag=mkTag(a.name,tagColor(a),tagSub(a),inParty(a.id)?(r.h==null?100:r.h):null);r.tagKey=null;SC.add(r.tag);if(a.pr&&typeof PRES!=='undefined')r.aura=PRES.aura(g,a.pr,{remote:1})}
 function angLerp(a,b,k){let d=b-a;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return a+d*k}
 function animRemote(r,dt){const g=r.g,Rg=r.rig;if(!g||!Rg)return;g.position.set(r.x,r.y,r.z);g.rotation.y=r.f;r.anim+=dt*(2+r.s*.8);const k=Math.min(1,r.s/6),air=!!(r.fl&8),st=r.st;let tgt,rate=16;
  if(r.fl&4){tgt=Object.assign({},st,{h:-.45,bx:1.3,Rx:-.4,Lx:-.4,rk:.6,lk:.6});rate=8}
@@ -6563,7 +6594,7 @@ O.frame=function(){if(!O.on)return;const t=performance.now(),dt=Math.min(.1,(t-(
  // our own state, 10 Hz
  sendT+=dt;if(O.authed&&sendT>=.1){sendT=0;const a=(P.roll>0?1:0)|(P.block?2:0)|(P.dead?4:0)|(!P.grounded?8:0),k=P.act&&P.act.clip?String(P.act.clip):'',u=k&&P.act.d?P.act.t/P.act.d:0;
   const sig=[P.x.toFixed(1),P.y.toFixed(1),P.z.toFixed(1),P.face.toFixed(2),a,k].join('|');
-  if(sig!==lastSend||k||t-(O._ls||0)>1500){lastSend=sig;O._ls=t;O.send({t:'pos',x:P.x,y:P.y,z:P.z,f:P.face,s:P.spd||0,a,k,u})}}
+  if(sig!==lastSend||k||t-(O._ls||0)>1500){lastSend=sig;O._ls=t;O.send({t:'pos',x:P.x,y:P.y,z:P.z,f:P.face,s:P.spd||0,a,k,u,h:Math.round(Math.max(0,Math.min(1,P.hp/(P.max||1)))*100)})}}
  if(!R.size)return;
  // rank by distance, show the nearest MAXVIS
  const list=[];for(const r of R.values()){const d=Math.hypot(r.tx-P.x,r.tz-P.z);r.d=d;list.push(r)}list.sort((a,b)=>a.d-b.d);
@@ -6572,7 +6603,7 @@ O.frame=function(){if(!O.on)return;const t=performance.now(),dt=Math.min(.1,(t-(
   if(Math.hypot(r.tx-r.x,r.tz-r.z)>25){r.x=r.tx;r.z=r.tz;r.y=r.ty}else{r.x+=(r.tx-r.x)*kf;r.y+=(r.ty-r.y)*kf;r.z+=(r.tz-r.z)*kf}r.f=angLerp(r.f,r.tf,Math.min(1,dt*14));
   if(show&&!r.g)build(r);
   if(r.g){if(r.g.visible!==show){r.g.visible=show;r.tag.visible=show}
-   if(show){animRemote(r,dt);r.tag.position.set(r.x,r.y+r.hgt,r.z);if(r.bub){r.bub.sp.position.set(r.x,r.y+r.hgt+.85+r.bub.sp.userData.h*.5,r.z)}}}}
+   if(show){animRemote(r,dt);refreshTag(r);r.tag.position.set(r.x,r.y+r.hgt,r.z);if(r.bub){r.bub.sp.position.set(r.x,r.y+r.hgt+.85+r.bub.sp.userData.h*.5,r.z)}}}}
  aimScan()};
 function aimScan(){if(typeof CAM==='undefined'||!R.size){if(O.aim){O.aim=null;O.emit('aim')}return}
  const sx=(typeof AIM!=='undefined'&&AIM.sx!=null)?AIM.sx:innerWidth/2,sy=(typeof AIM!=='undefined'&&AIM.sy!=null)?AIM.sy:innerHeight/2;
@@ -6607,19 +6638,49 @@ if(O.mp()){
  {const f=starGain;starGain=function(n,x,y,z){if(O.perks.star>0&&n>0)n=Math.max(n,Math.round(n*(1+O.perks.star)));return f.call(this,n,x,y,z)}}
  {const f=statBonus;statBonus=function(k){const B=f.apply(this,arguments);if(O.perks.hp||O.perks.pm){B.hp=(B.hp||0)+O.perks.hp;B.pm=(B.pm||0)+O.perks.pm;B.mm=(B.mm||0)+O.perks.pm}return B}}
  {const f=ECON.charge;ECON.charge=function(id){const ok=f.apply(this,arguments);if(ok)O.ev('place',1);return ok}}
- {const f=saveProg;saveProg=function(){const r=f.apply(this,arguments);O.dirtySave=true;return r}}
+ {const f=saveProg;saveProg=function(){if(window.__noSave)return;const r=f.apply(this,arguments);O.dirtySave=true;if(O.schedulePush)O.schedulePush();return r}}
  setInterval(()=>{if(O.authed)O.stat()},45000);
- setInterval(()=>{if(O.authed&&O.dirtySave){O.dirtySave=false;O.cloudPush()}},90000);
- addEventListener('beforeunload',()=>{try{if(O.authed&&O.dirtySave)O.cloudPush()}catch(e){}});
+/* v15: shared world clock – traps that cycle (spike floors) must be in the same phase on every client */
+O.clockOff=0;O.clock=()=>(Date.now()+O.clockOff)/1000;
+setInterval(()=>{if(O.authed)O.send({t:'ping',ts:performance.now()})},12000);
+setInterval(()=>{if(O.authed&&typeof TIME!=='undefined'){const p=Math.PI;window.HZPH=(((O.clock()-TIME)%p)+p)%p}else window.HZPH=0},1000);
+ /* v16: progress is pushed to the account soon after it changes (debounced), when the tab is hidden/closed, and on a slow safety timer */
+ let pushT=0,firstDirty=0;const flushNow=()=>{clearTimeout(pushT);pushT=0;firstDirty=0;if(O.authed&&O.dirtySave)O.cloudPush()};
+ O.schedulePush=()=>{if(!firstDirty)firstDirty=Date.now();clearTimeout(pushT);pushT=setTimeout(flushNow,Date.now()-firstDirty>30000?500:6000)};
+ setInterval(()=>{if(O.authed&&O.dirtySave)flushNow()},30000);
+ addEventListener('beforeunload',()=>{try{flushNow()}catch(e){}});addEventListener('pagehide',()=>{try{flushNow()}catch(e){}});
+ document.addEventListener('visibilitychange',()=>{try{if(document.hidden)flushNow()}catch(e){}});
 }
 /* ---------------- cloud save of this device's multiplayer profile ---------------- */
 const KEYS=['nca_prog_v1','nca_designs_v1','nca_studio_v3','nca_heropicked'];
-O.cloudPush=function(){if(!O.authed)return;try{const b={};for(const k of KEYS){const v=ls(k);if(v)b[k]=v}if(b.nca_prog_v1)O.send({t:'save',blob:b})}catch(e){}};
-O.on_('saved',m=>ls('nca_cloud_t',String(m.at)));
-function cloudCheck(w){const mine=+ls('nca_cloud_t')||0;if(!w.saveT||w.saveT<=mine)return;const fresh=!ls('nca_prog_v1');
- const apply=()=>O.send({t:'loadsave'});if(fresh)return apply();
- O.emit('cloudask',{at:w.saveT,yes:apply,no:()=>{ls('nca_cloud_t',String(w.saveT));O.dirtySave=true}})}
-O.on_('savedata',m=>{if(!m.save||!m.save.blob)return;try{for(const k of KEYS)if(m.save.blob[k]!=null)ls(k,m.save.blob[k]);ls('nca_cloud_t',String(m.save.t));closing=true;location.reload()}catch(e){toast('Could not load the cloud save','bad')}});
+O.hold=false;O.cloudState=null;
+/* builds the blob; the progress key always goes, the big optional keys (build hub / designs) are dropped if the whole thing would be too large for the server */
+function cloudBlob(){const b={};for(const k of KEYS){const v=ls(k);if(v)b[k]=v}if(!b.nca_prog_v1)return null;
+ const size=()=>{let n=0;for(const k in b)n+=b[k].length;return n};for(const k of['nca_designs_v1','nca_studio_v3']){if(size()<1.6e6)break;delete b[k]}return b}
+O.cloudPush=function(force){if(!O.authed||O.hold)return false;try{const b=cloudBlob();if(!b)return false;const sig=Object.keys(b).map(k=>k+':'+b[k].length+':'+hashStr(b[k])).join('|');
+ if(!force&&sig===O.lastSig&&Date.now()-(O.lastPushT||0)<600000){O.dirtySave=false;return true}
+ O.pendingSig=sig;O.dirtySave=false;O.send({t:'save',blob:b});clearTimeout(O._ackT);O._ackT=setTimeout(()=>{if(O.lastSig!==O.pendingSig){O.dirtySave=true;if(O.schedulePush)O.schedulePush()}},12000);return true}catch(e){return false}};
+function hashStr(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return h>>>0}
+O.on_('saved',m=>{if(m.ok===false){if(m.why!=='empty')O.dirtySave=true;O.emit('cloudsaved',m);return}ls('nca_cloud_t',String(m.at));O.lastSig=O.pendingSig;O.lastPushT=Date.now();O.emit('cloudsaved',m)});
+/* login on this device: decide whether the account's cloud save or this device's progress wins */
+/* does this device hold real progress (not just the empty default a fresh browser writes at boot)? */
+function meaningful(){try{const j=JSON.parse(ls('nca_prog_v1')||'null');if(!j||!j.PROG)return false;const P=j.PROG,H=P._hero||{};
+ for(const k in H)if(H[k]&&((H[k].lv|0)>1||H[k].pr||(H[k].xp|0)>0))return true;
+ if((P._kills|0)>0||(P._bosses|0)>0)return true;for(const k in P)if(k[0]!=='_'&&P[k]&&P[k].done)return true;
+ if(P._unl&&Object.keys(P._unl).length>1)return true;return false}catch(e){return !!ls('nca_prog_v1')}}
+function cloudCheck(w){const cid=ls('nca_cloud_id'),sameAcct=!cid||cid===w.id;if(cid!==w.id){ls('nca_cloud_id',w.id);if(!sameAcct)ls('nca_cloud_t','0')}
+ const mine=+ls('nca_cloud_t')||0,have=meaningful();
+ if(!w.hasSave){ /* server has nothing (new account or the server was reset) – put this device's progress back up right away */
+  if(have){O.dirtySave=true;O.lastSig=null;setTimeout(()=>O.cloudPush(true),1500)}return}
+ if(w.saveT<=mine){ /* this device is already up to date with the account; push anything newer */
+  if(O.dirtySave||!O.lastSig)setTimeout(()=>O.cloudPush(),2500);return}
+ if(!have)return O.send({t:'loadsave'}); /* fresh device: restore automatically */
+ O.hold=true; /* don't let an automatic push overwrite the cloud copy while the player is deciding */
+ O.emit('cloudask',{at:w.saveT,yes:()=>{O.hold=false;O.send({t:'loadsave'})},no:()=>{O.hold=false;ls('nca_cloud_t',String(w.saveT));O.dirtySave=true;O.cloudPush(true)}})}
+O.on_('savedata',m=>{if(!m.save||!m.save.blob)return;try{window.__noSave=true; /* the page unload handlers (codex.js) would otherwise write this session's in-memory progress over the restored save */for(const k of KEYS)if(m.save.blob[k]!=null)ls(k,m.save.blob[k]);ls('nca_cloud_t',String(m.save.t));closing=true;location.reload()}catch(e){toast('Could not load the cloud save','bad')}});
+/* recovery key = the account's secret token. Signing in with it on any browser/device restores the account (and its cloud save). */
+O.recoveryKey=()=>{const a=acct();return a&&a.token||''};
+O.signInKey=function(k){k=String(k||'').trim();if(!/^[0-9a-f]{16,64}$/i.test(k))return false;setAcct({name:'',token:k.toLowerCase()});O.recovering=true;if(!O.ws||O.ws.readyState>1)connect();else hello();return true};
 /* ---------------- chat ---------------- */
 O.chat=function(ch,text,to){if(!O.authed){toast('Chat needs a server connection','bad');return}O.send({t:'chat',ch,text,to})};
 /* ---------------- ready up / transport ---------------- */
@@ -6642,7 +6703,7 @@ O.publishHub=function(pub,cb){if(!O.authed)return toast('Publishing needs a serv
  try{if(typeof BLD!=='undefined'&&S&&S.mine&&!S.visit&&typeof saveTerrain==='function'&&RT.terr)saveTerrain()}catch(e){}
  const sc=BLD.mineList().map(s=>JSON.parse(JSON.stringify(s)));if(!sc.length)return toast('Build something first','bad');
  const keep=(pub===null||pub===undefined)?(O.profile&&O.profile.hubPublic):pub;
- O._pubcb=cb;O.send({t:'hubpub',public:!!keep,scenes:sc})};
+ O._pubcb=cb;O.send({t:'hubpub',public:!!keep,scenes:sc,shot:(typeof ATLAS!=='undefined'&&ATLAS.shot)?ATLAS.shot():null})};
 O.on_('hubpub',m=>{if(O.profile)O.profile.hubPublic=m.public;const f=O._pubcb;O._pubcb=null;if(f)f();else toast(m.public?'Your hub is <b>public</b> — anyone can visit it from your profile':'Hub saved on the server (private)','done')});
 /* ---------------- visiting another player's hub ---------------- */
 O.visiting=null;
@@ -6664,6 +6725,9 @@ O.pingServer=function(cb){const u=O.httpUrl();if(!u)return cb(null);const ctl=ne
 if(typeof PROF!=='undefined'){const g=PROF.gate;PROF.gate=function(fn){g(function(){if(O.mp())Hooks_chain();fn();if(O.mp()){document.body.classList.add('netmp');setTimeout(()=>O.start(),400)}})}}
 /* run every frame (MGC.tick is called from the main loop) */
 {const t=MGC.tick;MGC.tick=function(){t.apply(this,arguments);if(O.on)O.frame()}}
+O.sendCo=(d,to)=>O.send(to?{t:'co',d,to}:{t:'co',d});
+/* other players in this room as plain records (used by the shared-enemy host to aim foes at them) */
+O.peers=()=>{const a=[];for(const r of R.values())a.push({id:r.id,x:r.tx!==undefined?r.tx:r.x,y:r.ty!==undefined?r.ty:r.y,z:r.tz!==undefined?r.tz:r.z,f:r.tf||0,dead:!!(r.fl&4),roll:!!(r.fl&1),block:!!(r.fl&2)});return a};
 O.rooms={MAXVIS,SHOWD};
 return O})();
 
@@ -6828,12 +6892,15 @@ function renderSoc(){if(!O.isOpen('socp'))return;const b=soc.querySelector('.nb'
   else{h=`<p class="mu">Party of ${pt.members.length}/${pt.max||8}. ${pt.leader===me?'You are the <b>leader</b> — use a chapter portal to start a Ready Up.':'Only the leader picks the destination.'}</p>`+pt.members.map(m=>`<div class="li"><span class="dot ${m.online?'on':''}"></span><b>${pt.leader===m.id?'👑 ':''}${esc(m.name)}</b><small>Lv ${m.lv} ${esc(KN(m.hero))}</small><span class="sp"></span><button class="pb sm ghost" data-fa="prof" data-id="${m.id}">Profile</button>${pt.leader===me&&m.id!==me?`<button class="pb sm ghost" data-fa="promote" data-id="${m.id}">👑</button><button class="pb sm ghost" data-fa="kick" data-id="${m.id}">Kick</button>`:''}</div>`).join('')+'<div class="row" style="margin-top:8px"><button class="pb sm ghost" data-fa="leave">Leave party</button></div>'}}
  else{const list=[...NET.remote.values()].sort((a,b)=>a.d-b.d);h=list.length?list.map(r=>`<div class="li"><b>${r.a.tag?'['+esc(r.a.tag)+'] ':''}${esc(r.a.name)}</b><small>Lv ${r.a.lv||1} ${esc(KN(r.a.hero))}</small><span class="sp"></span><button class="pb sm ghost" data-fa="prof" data-id="${r.id}">Profile</button></div>`).join(''):'<p class="mu">Nobody else is in this area right now.</p>'}
  const a=NET.acct();
- b.innerHTML=`<div class="tabs2">${tabs}</div>${h}<h4>Account</h4><div class="row"><span class="mu">Signed in as <b>${esc(NET.me.name)}</b>${NET.wixLinked?' · linked to your site account':''}</span><span class="sp"></span><button class="pb sm ghost" data-fa="cloud">☁ Save to cloud</button><button class="pb sm ghost" data-fa="out">Switch account</button></div>`}
+ b.innerHTML=`<div class="tabs2">${tabs}</div>${h}<h4>Account</h4><div class="row"><span class="mu">Signed in as <b>${esc(NET.me.name)}</b>${NET.wixLinked?' · linked to your site account':''}</span><span class="sp"></span><button class="pb sm ghost" data-fa="cloud">☁ Save now</button><button class="pb sm ghost" data-fa="pw">${NET.hasPw?'🔒 Change password':'🔒 Set password'}</button><button class="pb sm ghost" data-fa="key">🔑 Recovery key</button><button class="pb sm ghost" data-fa="out">Switch account</button></div><div class="mu" style="font-size:12px;margin-top:4px">${cloudLine()}</div>`}
+function cloudLine(){let t=0;try{t=+localStorage.getItem('nca_cloud_t')||0}catch(e){}return (t?'☁ Progress (levels, prestige, champions, codex, build hub) last backed up to your account '+new Date(t).toLocaleString()+'. It saves automatically as you play.':'☁ Your progress backs up to your account automatically as you play.')+(NET.hasPw?' · 🔒 Password set — sign in on any device with your name + password.':' · <b style="color:var(--go)">Set a password</b> to sign in on your phone, tablet or another browser.')}
 soc.addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t){stab=t.dataset.t;renderSoc();return}const a=e.target.closest('[data-fa]');if(!a)return;const id=a.dataset.id,k=a.dataset.fa;
  if(k==='accept'||k==='decline')NET.send({t:'friend',op:k,id});else if(k==='prof')O.profile(id);else if(k==='w'){O.close('socp');openChat('/w '+a.dataset.n.replace(/ /g,'_')+' ')}else if(k==='inv'){NET.send({t:'party',op:'invite',id});a.disabled=true}
  else if(k==='rm')NET.send({t:'friend',op:'remove',id});else if(k==='kick')NET.send({t:'party',op:'kick',id});else if(k==='promote')NET.send({t:'party',op:'promote',id});else if(k==='leave')NET.send({t:'party',op:'leave'});
- else if(k==='cloud'){NET.cloudPush();toast('Progress saved to your account','done')}
- else if(k==='out'){try{localStorage.removeItem('nca_acct')}catch(er){}location.reload()}});
+ else if(k==='cloud'){NET.dirtySave=true;if(NET.cloudPush(true))toast('Saving to your account…','done');else toast('Could not save – no server connection','bad')}
+ else if(k==='pw')pwDialog();else if(k==='key')keyDialog(false);
+ else if(k==='out')keyDialog(true)});
+NET.on_('cloudsaved',m=>{if(m.ok===false){if(m.why==='big')toast('Save is too large for the server','bad');return}try{if(O.isOpen('socp'))renderSoc()}catch(e){}});
 for(const t of['friends','party','guild'])NET.on_(t,()=>renderSoc());NET.on_('room',()=>renderSoc());
 
 /* ---------------- party frame ---------------- */
@@ -6866,11 +6933,22 @@ const rdyEnd=why=>{clearInterval(rdyT);rdyData=null;O.close('rdy');if(why)toast(
 NET.on_('ready_end',m=>rdyEnd(m.reason));NET.on_('go',()=>rdyEnd(''));
 
 /* ---------------- sign-in / cloud dialogs ---------------- */
-function nameDialog(err){const b=nameq.querySelector('.nb');b.innerHTML=`<h2>CHOOSE YOUR NAME</h2><p class="mu">This is how other champions see you in the shared hub. Your browser keeps a secret key so only you can sign in as this name.</p><input class="tin" id="nq-n" maxlength="16" placeholder="3–16 letters or numbers" value="${esc(NET.acct()&&NET.acct().name||'')}"><div class="er" id="nq-e">${esc(err||'')}</div><div class="row" style="justify-content:center"><button class="pb" id="nq-go">Enter the hub</button><button class="pb ghost" id="nq-off">Play offline</button></div>`;
- O.open('nameq');const inp=$$('nq-n');setTimeout(()=>inp.focus(),30);const go=()=>{const v=inp.value.trim();if(v.length<3){$$('nq-e').textContent='At least 3 characters.';return}$$('nq-e').textContent='Connecting…';NET.signIn(v)};
- $$('nq-go').onclick=go;inp.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('nq-off').onclick=()=>{O.close('nameq');NET.status='offline';chipUp()}}
-NET.on_('needname',()=>nameDialog());NET.on_('denied',m=>{nameDialog(m.text)});NET.on_('welcome',()=>O.close('nameq'));
-NET.on_('cloudask',a=>{const b=nameq.querySelector('.nb');b.innerHTML=`<h2>CLOUD SAVE FOUND</h2><p>Your account has a multiplayer save from <b>${new Date(a.at).toLocaleString()}</b> that is newer than this device’s.</p><p class="mu">Loading it replaces this device’s multiplayer progress (campaign is never touched).</p><div class="row" style="justify-content:center"><button class="pb" id="cl-y">Load cloud save</button><button class="pb ghost" id="cl-n">Keep this device’s</button></div>`;O.open('nameq');$$('cl-y').onclick=()=>{O.close('nameq');a.yes()};$$('cl-n').onclick=()=>{O.close('nameq');a.no()}});
+function nameDialog(err,m){m=m||{};const taken=m.code==='taken'||m.code==='badpw'||m.code==='slow';const b=nameq.querySelector('.nb');const nm=taken&&m.name?m.name:(NET.acct()&&NET.acct().name||'Champion'+(1000+Math.floor(Math.random()*9000)));
+ b.innerHTML=`<h2>${taken?'SIGN IN':'CHOOSE YOUR NAME'}</h2><p class="mu">${taken?(m.hasPw?'Enter the password of <b>'+esc(m.name||'')+'</b> to sign in on this device — your levels, prestige, champions and codex come with it.':'<b>'+esc(m.name||'')+'</b> has no password yet. If it is yours, sign in with its recovery key (below), then set a password in Social → Account. Otherwise pick another name.'):'This is how other champions see you in the shared hub. Played before on another device? Enter that name and its password.'}</p><input class="tin" id="nq-n" maxlength="16" placeholder="3–16 letters or numbers" value="${esc(nm)}" autocomplete="username"><input class="tin" id="nq-p" type="password" maxlength="64" placeholder="${taken?'Password':'Password (optional · lets you sign in on any device)'}" autocomplete="${taken?'current-password':'new-password'}" style="margin-top:8px"><div class="er" id="nq-e">${esc(err||'')}</div><div class="row" style="justify-content:center"><button class="pb" id="nq-go">${taken?'Sign in':'Enter the hub'}</button><button class="pb ghost" id="nq-off" style="${NET.url()?'display:none':''}">Play offline</button></div><div style="text-align:center;margin-top:10px"><button class="lnk" id="nq-key" style="background:none;border:0;color:var(--cy);text-decoration:underline;cursor:pointer;font:600 12px var(--f)">Have a recovery key instead? Sign in with it</button></div>`;
+ O.open('nameq');const inp=$$('nq-n'),pin=$$('nq-p');setTimeout(()=>{(taken?pin:inp).focus()},30);const go=()=>{const v=inp.value.trim(),pw=pin.value;if(v.length<3){$$('nq-e').textContent='At least 3 characters.';return}if(pw&&pw.length<6){$$('nq-e').textContent='Passwords are at least 6 characters.';return}$$('nq-e').textContent='Connecting…';NET.signIn(v,pw)};
+ $$('nq-go').onclick=go;$$('nq-key').onclick=()=>keyEntry();for(const i of[inp,pin])i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('nq-off').onclick=()=>{NET.offlineChoice=true;O.close('nameq');NET.status='offline';chipUp()};if(NET.url()&&!taken)inp.select()}
+NET.on_('needname',()=>{if(!O.isOpen('nameq'))nameDialog()});NET.on_('status',()=>{const b=document.getElementById('nq-off');if(b&&O.isOpen('nameq')&&NET.status==='offline'){b.style.display='';b.textContent='Server unreachable — play offline for now'}});NET.on_('denied',m=>{if(m.rk)keyEntry(m.text);else nameDialog(m.text,m)});NET.on_('welcome',()=>O.close('nameq'));
+function keyEntry(err){const b=nameq.querySelector('.nb');b.innerHTML=`<h2>SIGN IN WITH RECOVERY KEY</h2><p class="mu">Paste the recovery key from <b>Social → Account → 🔑 Recovery key</b> on the device you played on. Your levels, prestige, champions and codex come back with it.</p><input class="tin" id="rk-i" placeholder="paste recovery key" autocomplete="off" spellcheck="false"><div class="er" id="rk-e">${esc(err||'')}</div><div class="row" style="justify-content:center"><button class="pb" id="rk-go">Sign in</button><button class="pb ghost" id="rk-back">Back</button></div>`;O.open('nameq');const i=$$('rk-i');setTimeout(()=>i.focus(),30);
+ const go=()=>{if(!NET.signInKey(i.value))$$('rk-e').textContent='That does not look like a recovery key.';else $$('rk-e').textContent='Connecting…'};$$('rk-go').onclick=go;i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('rk-back').onclick=()=>nameDialog()}
+function pwDialog(){const b=nameq.querySelector('.nb');b.innerHTML=`<h2>${NET.hasPw?'CHANGE PASSWORD':'SET A PASSWORD'}</h2><p>With a password you can sign in as <b>${esc(NET.me.name)}</b> on any device or browser — phone, tablet or another computer — using your name and password. Your levels, prestige, champions and codex follow you.</p><input class="tin" id="pw-a" type="password" maxlength="64" placeholder="New password (6+ characters)" autocomplete="new-password"><input class="tin" id="pw-b" type="password" maxlength="64" placeholder="Repeat it" autocomplete="new-password" style="margin-top:8px"><div class="er" id="pw-e"></div><div class="row" style="justify-content:center"><button class="pb" id="pw-go">Save password</button><button class="pb ghost" id="pw-x">Cancel</button></div>`;O.open('nameq');
+ const a=$$('pw-a'),c=$$('pw-b');setTimeout(()=>a.focus(),30);const go=()=>{if(a.value.length<6){$$('pw-e').textContent='At least 6 characters.';return}if(a.value!==c.value){$$('pw-e').textContent='The two passwords don’t match.';return}$$('pw-e').textContent='Saving…';NET.send({t:'setpw',pw:a.value})};
+ $$('pw-go').onclick=go;for(const i of[a,c])i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go()};$$('pw-x').onclick=()=>O.close('nameq')}
+NET.on_('pwset',m=>{if(m.ok){NET.hasPw=true;if(O.isOpen('nameq'))O.close('nameq');toast(esc(m.text),'done');try{renderSoc()}catch(e){}}else{const e=document.getElementById('pw-e');if(e)e.textContent=m.text;else toast(esc(m.text),'bad')}});
+NET.on_('welcome',m=>{if(m.hasPw)return;let k='nca_pw_tip_'+m.id;try{if(localStorage.getItem(k))return;localStorage.setItem(k,'1')}catch(e){}setTimeout(()=>{if(!NET.hasPw)toast('🔒 <b>Tip:</b> set a password in <b>Social → Account</b> so you can sign in on your phone, tablet or another browser and keep all your progress.','done')},25000)});
+function keyDialog(out){const k=NET.recoveryKey();const b=nameq.querySelector('.nb');b.innerHTML=`<h2>${out?'SWITCH ACCOUNT':'RECOVERY KEY'}</h2><p>${out?'Before you switch, <b>save this key</b>. It is the only way to sign back in to <b>'+esc(NET.me.name)+'</b> from another browser or after clearing site data.':'Keep this key somewhere safe. Anyone with it can sign in as you; with it you can get back into this account from any browser or device.'}</p><input class="tin" id="rk-v" readonly value="${esc(k)}" style="font-size:12px"><div class="row" style="justify-content:center;margin-top:10px"><button class="pb" id="rk-cp">Copy key</button>${out?'<button class="pb ghost" id="rk-sw">I saved it – switch</button>':''}<button class="pb ghost" id="rk-x">Close</button></div>`;O.open('nameq');
+ $$('rk-cp').onclick=()=>{const v=$$('rk-v');v.select();let ok=false;try{navigator.clipboard.writeText(k);ok=true}catch(e){}try{ok=document.execCommand('copy')||ok}catch(e){}toast(ok?'Recovery key copied':'Select the key and copy it','done')};$$('rk-x').onclick=()=>O.close('nameq');
+ if(out)$$('rk-sw').onclick=()=>{try{localStorage.removeItem('nca_acct')}catch(er){}location.reload()}}
+NET.on_('cloudask',a=>{const b=nameq.querySelector('.nb');b.innerHTML=`<h2>CLOUD SAVE FOUND</h2><p>Your account has a multiplayer save from <b>${new Date(a.at).toLocaleString()}</b> that is newer than this device’s (or from a different device).</p><p class="mu">Loading it replaces this device’s multiplayer progress (campaign is never touched). Not sure? Choose <b>Load cloud save</b> — it is your account’s backup.</p><div class="row" style="justify-content:center"><button class="pb" id="cl-y">Load cloud save</button><button class="pb ghost" id="cl-n">Keep this device’s</button></div>`;O.open('nameq');$$('cl-y').onclick=()=>{O.close('nameq');a.yes()};$$('cl-n').onclick=()=>{O.close('nameq');a.no()}});
 
 /* ---------------- keys ---------------- */
 const baseUI=()=>{const u=['journal','hsel','modal','chsel','stm','studio','complete','death','dlg','talk','setm','pausem','tutc','mainm'];return u.some(i=>{const q=$$(i);return q&&q.classList.contains('on')})};
@@ -7069,7 +7147,7 @@ function openB(id){U.open(id);bpause()}
 for(const id of BP)U.onClose[id]=()=>setTimeout(bpause,0);
 const mkB=(id,title,wide)=>{const p=U.mk(id,title,wide);return p};
 const body=id=>$$(id).querySelector('.nb');
-const need=()=>{if(!MP()||!NET.authed){toast('This building needs a server connection — you are playing offline.','bad');return false}return true};
+const need=()=>{if(!MP()||!NET.authed){if(MP()&&NET.url()){NET.ensure(true);toast('Connecting to the server… try again in a moment.','bad')}else toast('This building needs a server connection — you are playing offline.','bad');return false}return true};
 /* ---------------- hub objects ---------------- */
 const GH={x:-27,z:-24};
 O.install=function(){const f=Hooks.onLoad;Hooks.onLoad=function(o){f(o);try{O.onLoad()}catch(e){console.error('hubb',e)}}};
@@ -7595,6 +7673,570 @@ A.moros={title:'Boneyard Muster',theme:'codex',mood:'crypt',ground:'dirt',dps:[1
   H.trial('pact','Death Pact Pit','A tight pit – make the pact count.',-40,-14,[{k:'mutant',n:8,ring:8},{k:'razor',n:4,ring:12}],[22,34,52],{r:14});}};
 })();
 
+</script>
+<script>
+/* ============ FXN · other players' attacks and abilities, visible on every client (v15) ============
+   Remote champions already show position + animation clip (net.js). This module adds the *effects*: slashes, spell rings, projectiles,
+   explosions, hit sparks, zones and the sounds that go with them.
+   Sender: while the local champion's own code runs (action events, hits, timers it queued) we record
+     · every low-level VX / sparks effect call            ['l'|'s', name, args]
+     · the kit's high-level helpers (slashFx, fxRing …)    ['h', name, args, caster pose]  – replayed with P/Hero temporarily set to the caster
+     · player projectiles + ground zones (spawn and end)  ['p'|'k'|'z'] so they fly / linger / blow up on every screen
+   and batch them to the room as {t:'fx'}. Receivers replay through the ORIGINAL functions with recording off. Replays are visual only:
+   remote projectiles/zones never hurt anything (damage is decided by the shooter's client / the shared-enemy host). */
+const FXN=(()=>{
+const O={rec:0,play:0,hi:0,q:[],id:0,pj:new Map(),st:{sent:0,got:0,pj:0,zn:0,err:0,hl:0}};
+const live=()=>typeof NET!=='undefined'&&NET.mp()&&NET.authed&&NET.roomCount>1&&typeof P!=='undefined'&&P;
+const R3=n=>Math.round(n*1000)/1000;
+const G=n=>{try{return(0,eval)('typeof '+n+'==="function"?'+n+':null')}catch(e){return null}};
+const setG=(n,w)=>{try{(0,eval)('(function(w){'+n+'=w})')(w)}catch(e){window[n]=w}};
+function ser(a){if(a===undefined||a===null)return null;const t=typeof a;if(t==='number')return isFinite(a)?R3(a):0;if(t==='string'||t==='boolean')return a;if(a.isVector3)return{v:[R3(a.x),R3(a.y),R3(a.z)]};
+ if(Array.isArray(a))return a.slice(0,8).map(ser);if(t==='object'){const o={};let n=0;for(const k in a){const v=a[k],tv=typeof v;if(tv==='function'||(v&&(v.isObject3D||v.isMaterial||v.isTexture||v.isColor)))continue;if(++n>24)break;o[k]=ser(v)}return o}return null}
+function des(a){if(a&&typeof a==='object'){if(Array.isArray(a))return a.map(des);if(a.v&&a.v.length===3&&Object.keys(a).length===1)return new THREE.Vector3(a.v[0],a.v[1],a.v[2]);const o={};for(const k in a)o[k]=des(a[k]);return o}return a}
+const pose=()=>[R3(P.x),R3(P.y),R3(P.z),R3(P.face),typeof Hero!=='undefined'?Hero.key:''];
+let flT=null;function push(e){if(O.q.length>=90)return;O.q.push(e);if(!flT)flT=setTimeout(flush,0)}
+function flush(){flT=null;if(!O.q.length)return;const b=O.q;O.q=[];if(!live())return;let s;try{s=JSON.stringify(b)}catch(e){return}if(s.length>30000)return;O.st.sent+=b.length;NET.send({t:'fx',p:[R3(P.x),R3(P.z)],b})}
+const rec=(k,name,args,pz)=>{if(O.play||!live())return;const a=[];for(let i=0;i<args.length;i++)a.push(ser(args[i]));push(pz?[k,name,a,pz]:[k,name,a])};
+const ORIG={},HO={};
+const LOWS=['puff','wave','circle','scorch','explode','pillar','dust','heal','sparks','streakPlane','hit','snd'];
+const HIGH=['slashFx','beamFx','crackFx','fxRing','slamFx','pillarFx','swirlFx','kneeFx','whirlFx','quakeFx','slideStart','danChargeStart','danChargeEnd','hasteFx','holyRing','explodeFx','bolt3d','smokeAt'];
+const CTX=['updAct','beginAct','endAct','hitE','beginCombo'];
+O.install=function(){if(O.ok)return;O.ok=1;
+ for(const n of LOWS){const f=VX[n];if(typeof f!=='function')continue;ORIG['VX.'+n]=f;VX[n]=function(){if(O.rec>0&&!O.play&&!O.hi)rec('l',n,arguments);return f.apply(this,arguments)}}
+ for(const n of['emit','ring']){const f=sparks[n];if(typeof f!=='function')continue;ORIG['sp.'+n]=f;sparks[n]=function(){if(O.rec>0&&!O.play&&!O.hi)rec('s',n,arguments);return f.apply(this,arguments)}}
+ for(const n of HIGH){const f=G(n);if(!f)continue;HO[n]=f;setG(n,function(){if(!O.play&&!O.hi&&live())rec('h',n,arguments,pose());O.hi++;try{return f.apply(this,arguments)}finally{O.hi--}})}
+ for(const n of CTX){const f=G(n);if(!f)continue;setG(n,function(){O.rec++;try{return f.apply(this,arguments)}finally{O.rec--}})}
+ const proj=G('proj'),kill=G('killProj'),zone=G('zoneP');
+ if(proj){ORIG.proj=proj;setG('proj',function(o){const q=proj.apply(this,arguments);if(q&&q.m&&!O.play&&!q.vis&&live()){q.nid=++O.id;push(['p',q.nid,ser(Object.assign({},q.o,{onHit:0,from:0})),R3(q.x),R3(q.y),R3(q.z),R3(q.vx),R3(q.vy),R3(q.vz),R3(q.life)])}return q})}
+ if(kill){ORIG.killProj=kill;setG('killProj',function(i,x,y,z){const q=FPR[i],id=q&&q.nid&&!q.vis?q.nid:0;const r=kill.apply(this,arguments);if(id&&live())push(['k',id,R3(x),R3(y),R3(z)]);return r})}
+ if(zone){ORIG.zoneP=zone;setG('zoneP',function(o){const r=zone.apply(this,arguments);const z=FZ[FZ.length-1];if(z&&!O.play&&!z.vis&&live())push(['z',++O.id,ser(Object.assign({},o,{onHit:0,fn:0}))]);return r})}
+ const tp=TMR.push.bind(TMR);TMR.push=function(...a){for(const t of a){if(t&&typeof t.fn==='function'&&O.rec>0&&!t.__fx){const f=t.fn;t.__fx=1;t.fn=function(){O.rec++;try{return f.apply(this,arguments)}finally{O.rec--}}}}return tp(...a)};
+ NET.on_('fx',m=>{try{play(m)}catch(e){O.st.err++}})};
+O.dst=(i,hits,fx,fz)=>{if(i>=0&&!O.play&&live())push(['d',i,hits,R3(fx),R3(fz)])};
+/* ---------- receiver ---------- */
+const SND_R=26,VIS_R=75;
+function play(m){if(!m||!Array.isArray(m.b)||typeof playOn==='undefined'||!playOn||!RT||!RT.root)return;const d=Math.hypot((m.p&&m.p[0]||0)-P.x,(m.p&&m.p[1]||0)-P.z);if(d>VIS_R)return;
+ O.play++;const sv={x:P.x,y:P.y,z:P.z,face:P.face,hk:Hero.key};
+ try{for(const e of m.b){try{apply(e,d,m.from)}catch(er){O.st.err++;if(O.st.err<6)console.warn('fx replay',e&&e[0],e&&e[1],er)}}}finally{P.x=sv.x;P.y=sv.y;P.z=sv.z;P.face=sv.face;Hero.key=sv.hk;O.play--}O.st.got+=m.b.length}
+function apply(e,d,from){const k=e[0];
+ if(k==='l'){if(e[1]==='snd'&&d>SND_R)return;const f=ORIG['VX.'+e[1]];if(f)f.apply(VX,(e[2]||[]).map(des))}
+ else if(k==='s'){const f=ORIG['sp.'+e[1]];if(f)f.apply(sparks,(e[2]||[]).map(des))}
+ else if(k==='h'){const f=HO[e[1]];if(!f)return;const p=e[3]||[0,0,0,0,''];P.x=p[0];P.y=p[1];P.z=p[2];P.face=p[3];if(p[4]&&KITS[p[4]])Hero.key=p[4];f.apply(null,(e[2]||[]).map(des));O.st.hl++}
+ else if(k==='p'){const o=des(e[2])||{};o.from={x:e[3],y:e[4],z:e[5]};o.noTip=1;o.aim=0;o.home=0;o.flat=1;o.vy=e[7];o.dir=Math.atan2(e[6],e[8]);o.sp=Math.hypot(e[6],e[8])||1;o.life=e[9];o.dmg=0;o.kb=0;o.onHit=undefined;
+  const q=ORIG.proj(o);if(q){q.vis=1;q.vx=e[6];q.vy=e[7];q.vz=e[8];q.dmg=0;O.pj.set(from+':'+e[1],q);O.st.pj++;if(O.pj.size>200)O.pj.delete(O.pj.keys().next().value)}}
+ else if(k==='k'){const id=from+':'+e[1],q=O.pj.get(id);if(!q)return;O.pj.delete(id);const i=FPR.indexOf(q);if(i>=0)ORIG.killProj(i,e[2],e[3],e[4])}
+ else if(k==='d'){if(typeof DST!=='undefined')DST.remote(e[1],e[2],e[3],e[4])}
+ else if(k==='z'){const o=des(e[2])||{};o.dmg=0;o.onHit=undefined;ORIG.zoneP(o);const z=FZ[FZ.length-1];if(z){z.vis=1;z.dmg=0;O.st.zn++}}}
+return O})();
+
+try{FXN.install()}catch(e){console.error('FXN install',e)}
+
+</script>
+<script>
+/* ============ COOP · shared enemies for party instances and visited hubs ============
+   Before: every player ran their own private copy of the enemies. Now, in a room with 2+ players (a party chapter instance or a visited player hub)
+   the server picks ONE member as the HOST (the first one in the room; it hands over automatically when the host leaves).
+   * HOST   - runs the real enemy AI. Each foe picks the nearest living player (you or a remote one); when the target is someone else the AI is run
+              "as if" that player stood where they are, and the hit is sent to them as a damage event instead of hurting the host.
+              Sends 10 Hz snapshots of every awake foe, kill events, and relays hostile effects (projectiles, shockwaves, telegraphs, explosions).
+   * GUEST  - spawns no enemies of its own. It builds "puppets" (real enemy models with the AI switched off) that follow the host's snapshots.
+              Your attacks hit the puppet for the normal feedback, and the hit is forwarded to the host, which applies it. Kills come from the host and every
+              player in the room gets the kill (XP, drops, quest progress). Hostile effects arrive as events and are played locally, hurting only YOU.
+   * Anything goes wrong (host leaves, connection drops)? The guest that becomes the host turns its puppets back into live foes; alone in the room you are
+     simply solo again.  Everything lives in this file + a few one-line hooks (play.js updEnemies, rescue.js, spawners.js, net.js, server.js 'co'). */
+const COOP=(()=>{
+const O={rs:'solo',fr:0,seq:0,pc:[],pup:new Map(),byCn:new Map(),got:false,sup:0,hc:0,ap:0,relayIn:false,tgt:null,sid:null,hits:[],needT:0,spT:0,fuT:0,sq:[],
+ stat:{snap:0,hits:0,kills:0,pd:0,fx:0,promoted:0,demoted:0},hid:null};
+const q2=v=>Math.round(v*100)/100;
+const net=()=>typeof NET!=='undefined'?NET:null;
+const ok=()=>{try{return typeof S!=='undefined'&&S&&typeof RT!=='undefined'&&RT&&RT.root&&typeof MODE!=='undefined'&&MODE==='play'&&typeof playOn!=='undefined'&&playOn&&!transition}catch(e){return false}};
+/* ---- role: 'solo' | 'host' | 'guest' ---- */
+function calc(){const n=net();if(!n||!n.on||!n.authed||!n.me||!n.room||n.roomCount<2||!n.host)return'solo';
+ try{if(typeof MODE==='undefined'||MODE!=='play')return'solo'}catch(e){return'solo'}return n.host===n.me.id?'host':'guest'}
+O.role=()=>O.rs;O.on=()=>O.rs!=='solo';O.guest=()=>O.rs==='guest';O.isHost=()=>O.rs==='host';
+const sendCo=(d,to)=>{const n=net();if(n)n.sendCo(d,to)};
+const nameOf=id=>{try{const r=NET.remote.get(id);return r&&r.a&&r.a.name?r.a.name:'a teammate'}catch(e){return'a teammate'}};
+/* ---- helpers used by the one-line hooks in play.js ---- */
+O.dist=e=>{let d=Math.hypot(P.x-e.x,P.z-e.z);if(O.rs==='host')for(const p of O.pc){if(p.dead)continue;const v=Math.hypot(p.x-e.x,p.z-e.z);if(v<d)d=v}return d};
+O.keep=e=>{if(O.rs!=='host')return false;const R=(typeof ROOMS!=='undefined'?ROOMS.NEAR:44)+12;for(const p of O.pc)if(!p.dead&&Math.hypot(p.x-e.x,p.z-e.z)<R)return true;return false};
+/* ---- enemy detail (sent when a foe is announced) ---- */
+function flags(e){return(e.aggro?1:0)|(e.stun>0?2:0)|(e.engaged?4:0)}
+function detail(e){return{cn:e.cn,k:e.kind,x:q2(e.x),y:q2(e.y),z:q2(e.z),f:q2(e.f),tag:e.tag||null,key:e.key||null,hp:Math.round(e.hp),mx:Math.round(e.max),dmg:e.dmg,arm:e.arm||0,spd:+(e.spd0||e.spd||1).toFixed(2),
+ sc:+(e.sc||1).toFixed(3),r:+(e.r||.5).toFixed(2),h:+(e.h||1.8).toFixed(2),rar:e.rar||0,hc:e.hc||0,bn:e.bname||'',nd:e.noDrop?1:0,el:e.el||null,fl:flags(e),st:e.st||'idle'}}
+function progress(){try{return{kd:PS.killed,i:PS.i,fl:PS.flags}}catch(x){return{}}} /* chests stay personal: everyone loots their own */
+/* =====================================================================================================  HOST  */
+function assign(){let n=0;const fresh=[];for(const e of ENEM){if(e.dead||e.dummy||e.cn!=null||e.pup||!e.g)continue;e.cn=++O.seq;O.byCn.set(e.cn,e);fresh.push(e);n++}return fresh}
+function hostFrame(dt){
+ const fresh=assign();O.spT+=dt;
+ if(fresh.length)sendCo({k:'sp',es:fresh.map(detail)});
+ // relay hostile projectiles that were created since the last frame (PRJ is replaced on every scene load, so we look at the list itself)
+ for(const q of PRJ){if(q._r)continue;q._r=1;sendCo({k:'pj',x:q2(q.x),y:q2(q.y),z:q2(q.z),vx:q2(q.vx),vy:q2(q.vy),vz:q2(q.vz),l:q2(q.life),d:q.dmg,c:q.col||0,g:q.grav||0});O.stat.fx++}
+ // snapshots, 10 Hz: only foes that changed (plus a keep-alive every second)
+ if(O.spT>=.1){O.spT=0;const out=[],now=performance.now();
+  for(const e of ENEM){if(e.dead||e.cn==null||!e.g)continue;if(O.dist(e)>110)continue;
+   const a=[e.cn,q2(e.x),q2(e.y),q2(e.z),q2(e.f),Math.round(e.hp),flags(e),e.st||'idle',q2(e.ly||0)],k=a.join(',');
+   if(k===e._sk&&now-(e._sn||0)<1000)continue;e._sk=k;e._sn=now;out.push(a)}
+  if(out.length){sendCo({k:'s',e:out});O.stat.snap++}}
+ // slow reconciliation (every 2 s): list of live foes + quest progress, so a lost message can never leave a ghost or a missing foe
+ O.fuT+=dt;if(O.fuT>=2){O.fuT=0;const cn=[];for(const e of ENEM)if(!e.dead&&e.cn!=null)cn.push(e.cn);sendCo(Object.assign({k:'fu',cn},progress()))}
+ wipeCheck()}
+function wipeCheck(){if(!bossE||!bossE.engaged||!P.dead||!O.pc.length||!O.pc.every(p=>p.dead))return;
+ const b=bossE;if(b.tele){RT.root.remove(b.tele);b.tele=null}b.hp=b.max;b.engaged=false;b.st='idle';b.g.position.set(b.home.x,b.y,b.home.z);b.x=b.home.x;b.z=b.home.z;$('boss').classList.remove('on');bossE=null;
+ for(const q of ENEM)if(q.tag==='summon'&&!q.dead){q.dead=true;q.deadT=.1}}
+/* target choice + "as if that player stood there" */
+function pickTarget(e){let best=null,bd=1e9,cur=null,cd=1e9;
+ if(!P.dead){bd=Math.hypot(P.x-e.x,P.z-e.z);best={me:1};if(e._tg==='me'){cur=best;cd=bd}}
+ for(const p of O.pc){if(p.dead)continue;const d=Math.hypot(p.x-e.x,p.z-e.z);if(d<bd){bd=d;best=p}if(e._tg===p.id){cur=p;cd=d}}
+ if(cur&&cd<=bd+4)best=cur;e._tg=best?(best.me?'me':best.id):null;return best&&!best.me?best:null}
+const SW=['x','y','z','dead','stealthT','face','inv','roll','block','kx','kz','stunT','stunImm','drawing','dash','hurtT','hp'];
+function hostAI(e,dt,fn,args,self){const T=pickTarget(e);
+ if(!T){O.hc++;try{return fn.apply(self,args)}finally{O.hc--}}
+ const sv={};for(const k of SW)sv[k]=P[k];
+ P.x=T.x;P.y=T.y;P.z=T.z;P.dead=T.dead?1:0;P.stealthT=0;P.face=T.f;P.inv=0;P.roll=T.roll?1:0;P.block=0;O.tgt=T;O.hc++;
+ try{return fn.apply(self,args)}finally{O.hc--;O.tgt=null;for(const k of SW)P[k]=sv[k]}}
+/* host: damage meant for another player becomes a message */
+{const _hp=hurtPlayer;hurtPlayer=function(dmg,sx,sz,kb,unblock){
+  if(O.tgt&&!TGT){const T=O.tgt;if(T.roll)return false;sendCo({k:'pd',d:Math.round(dmg),sx:q2(sx),sz:q2(sz),kb:kb===undefined?6:kb,ub:unblock?1:0},T.id);O.stat.pd++;return true}
+  return _hp.apply(this,arguments)}}
+{const _ai=aiEnemy;aiEnemy=function(e,dt){
+  if(e.pup){puppetStep(e,dt);return}
+  if(O.rs==='host'&&!e.dummy&&e.g)return hostAI(e,dt,_ai,arguments,this);
+  return _ai.apply(this,arguments)}}
+{const _k=killEnemy;killEnemy=function(e){
+  if(e&&e.pup&&!O.ak)return;
+  const was=e&&e.dead;if(O.rs==='host')O.hc++;
+  try{const r=_k.apply(this,arguments);if(e&&!was&&e.dead&&O.rs==='host'&&e.cn!=null){sendCo({k:'kl',cn:e.cn,x:q2(e.x),z:q2(e.z)});O.byCn.delete(e.cn);O.stat.kills++}return r}
+  finally{if(O.rs==='host')O.hc--}}}
+/* hostile effects made by the host's foes are repeated on every guest (each guest only ever hurts itself) */
+{const _b=boomAt;boomAt=function(x,z,rad,dmg,col,y){
+  if(O.sup>0&&!O.relayIn)return;
+  if(O.rs==='host'){sendCo({k:'bm',x:q2(x),z:q2(z),r:rad,d:Math.round(dmg),c:col||0,y:y===undefined?null:q2(y)});O.stat.fx++}
+  return _b.apply(this,arguments)}}
+{const _s=shockwave;shockwave=function(x,z,speed,max,dmg,col,y0){
+  if(O.sup>0&&!O.relayIn)return;
+  if(O.rs==='host'&&O.hc>0){sendCo({k:'sw',x:q2(x),z:q2(z),sp:speed,mx:max,d:Math.round(dmg),c:col||0,y:y0===undefined?null:q2(y0)});O.stat.fx++}
+  return _s.apply(this,arguments)}}
+{const _t=telegraph;telegraph=function(x,z,r,t,fn,col){
+  if(O.sup>0&&!O.relayIn)return;
+  if(O.rs==='host'&&O.hc>0){sendCo({k:'tl',x:q2(x),z:q2(z),r:q2(r),t:q2(t),c:col===undefined?null:col});O.stat.fx++}
+  return _t.apply(this,arguments)}}
+/* the host applies hits that guests report */
+function applyHits(hs){for(const h of hs||[]){const e=O.byCn.get(h[0]);if(!e||e.dead)continue;const d=+h[1];if(!(d>=0)||d>1e5)continue;
+  O.ap++;const ls=P.ls;P.ls=0;try{hurtEnemy(e,d,+h[2]||0,+h[3]||0,+h[4]||0,!!h[5]);O.stat.hits++}catch(x){console.error('coop hit',x)}finally{P.ls=ls;O.ap--}}}
+function applyStatus(m){const e=O.byCn.get(m.cn);if(!e||e.dead)return;
+ if(m.stun>0)e.stun=Math.max(e.stun||0,Math.min(6,+m.stun));
+ if(m.slowT>0){e.slowT=Math.max(e.slowT||0,Math.min(10,+m.slowT));e.slowK=Math.max(0,Math.min(.9,+m.slowK||0))}
+ if(m.lvy>0&&!e.boss){if(m.lvy>(e.lvy||0))e.lvy=Math.min(14,+m.lvy);e.ly=Math.max(e.ly||0,+m.ly||.01)}}
+/* =====================================================================================================  GUEST  */
+function mkPuppet(d){const old=O.pup.get(d.cn);if(old&&!old.dead)return old;if(!ok()||typeof EG==='undefined'||!EG)return null;
+ let e=null;O.mk=true;try{e=spawnEnemy(d.k,d.x,d.z,d.tag,d.key||null,{_pup:1,pup:1,cn:d.cn,hp:d.mx||undefined})}catch(x){console.error('coop puppet',x)}finally{O.mk=false}
+ if(!e)return null;
+ try{if(d.rar&&typeof ELT!=='undefined'&&!e.rar)ELT.make(e,d.rar)}catch(x){}
+ e.pup=1;e.cn=d.cn;e.hp=d.hp;e.max=d.mx||d.hp;e.dmg=d.dmg;e.arm=d.arm;e.spd=e.spd0=d.spd;e.sc=d.sc;e.r=d.r;e.h=d.h;e.hc=d.hc||e.hc;e.noDrop=!!d.nd;e.tag=d.tag;e.el=d.el||null;if(d.bn)e.bname=d.bn;
+ e.x=e.tx=d.x;e.y=e.ty=d.y;e.z=e.tz=d.z;e.f=e.tf=d.f;e._fl=d.fl|0;e.st=d.st||'idle';e._ly=0;e.aggro=!!(d.fl&1);e._ss={stun:0,slowT:0,lvy:0};e.g.position.set(e.x,e.y,e.z);
+ O.pup.set(d.cn,e);return e}
+function applyKill(e){if(!e||e.dead)return;O.pup.delete(e.cn);O.sup++;O.ak=true;try{e.hp=0;killEnemy(e)}catch(x){console.error('coop kill',x)}finally{O.ak=false;O.sup--}}
+function dropPuppet(e){O.pup.delete(e.cn);e.dead=true;e.deadT=0;try{EG.remove(e.g)}catch(x){}const i=ENEM.indexOf(e);if(i>=0)ENEM.splice(i,1);if(bossE===e){bossE=null;try{$('boss').classList.remove('on')}catch(x){}}}
+/* ---- quest progress is shared by the whole room (v15) ----
+   Every client derives "which step am I on" from the shared state (killed / flags / opened), so every step-complete effect (gate opens, bridges show,
+   rifts close, rewards, toasts) runs on EVERY client – not only on the one that happened to finish the step. A late joiner catches up silently. */
+function silentStep(s){try{for(const gt of OB.gates)if(gt.o.d.until===s.id)openGate(gt,true);
+ for(const cn of OB.conns)if(cn.o.d.show===s.id){cn.g.visible=true;RT.hidden.delete(cn.o.id);buildCols()}
+ if(s.type==='destroy')for(const o of S.objs)if(o.k==='rift'){const g=RT.inst.get(o.id);if(g)g.userData.closing=1}}catch(x){console.error('coop silentStep',x)}}
+/* make the world match the shared state: collected relics vanish, opened chests dim, anchors destroyed elsewhere are gone here too */
+function worldSync(){try{
+ for(const r of OB.relics)if(r.g.visible!==false&&PS.flags['collect:'+r.o.d.tag]){r.g.visible=false;sparks.emit(r.o.x,r.g.position.y+1.2,r.o.z,0xffc94a,24,6,.3,.9,-3)}
+ for(const a of ANCH)if(!a.dead&&PS.killed[a.o.id]){a.dead=true;a.g.visible=false;RT.hidden.add(a.o.id);buildCols();sparks.emit(a.o.x,a.g.position.y+2,a.o.z,0xb36bff,30,7,.35,1,-4)}}catch(x){console.error('coop worldSync',x)}}
+const psig=()=>{try{return Object.keys(PS.killed).length+'|'+Object.keys(PS.flags).length+'|'+PS.i+'|'+(PS.done?1:0)}catch(x){return''}};
+function mergeProgress(d,first){if(!d||typeof PS==='undefined'||!PS)return;let ch=false;const Q=S&&S.quest;
+ if(d.kd){if(first)PS.killed=Object.assign({},d.kd);else for(const k in d.kd)if(!PS.killed[k]){PS.killed[k]=d.kd[k];ch=true}}
+ if(d.fl)for(const k in d.fl)if(PS.flags[k]===undefined){PS.flags[k]=d.fl[k];ch=true}
+ // joining a room that is already part-way through: catch up silently (no toast storm, no repeated rewards)
+ if(first&&typeof d.i==='number'&&d.i>PS.i&&Q){for(let j=PS.i;j<d.i&&j<Q.steps.length;j++)silentStep(Q.steps[j]);PS.i=d.i;ch=true}
+ worldSync();
+ if(ch||first){try{evalQuest()}catch(x){}}
+ // anything the shared state could not derive (older server data): still honour the step index, with full effects
+ if(typeof d.i==='number'&&d.i>PS.i&&Q){try{for(let j=PS.i;j<d.i&&j<Q.steps.length;j++)stepComplete(Q.steps[j]);PS.i=Math.min(d.i,Q.steps.length);ch=true;evalQuest()}catch(x){}}
+ if(ch||first){try{renderTracker()}catch(x){}}
+ O.pgSig=psig()}
+/* every 0.4 s: if our progress changed (we collected the relic, used the altar, reached a zone …) tell the room */
+function progTick(dt){if(O.rs==='solo'||(O.rs==='guest'&&!O.got))return;O.pgT=(O.pgT||0)+dt;if(O.pgT<.4)return;O.pgT=0;const s=psig();if(s===O.pgSig)return;O.pgSig=s;
+ if(O.rs==='guest')sendCo(Object.assign({k:'pg'},progress()),net().host);else sendCo(Object.assign({k:'pr'},progress()))}
+function applySnap(es){for(const a of es){const e=O.pup.get(a[0]);if(!e||e.dead)continue;e.tx=a[1];e.ty=a[2];e.tz=a[3];e.tf=a[4];if(a[5]!==e.hp){e.hp=a[5];if(e.boss&&bossE===e)updateBoss(e)}e._fl=a[6];e.st=a[7];e._ly=a[8]||0;e.aggro=!!(a[6]&1);if(e.boss)e.engaged=!!(a[6]&4)}}
+const ARMS=new Set(['wind','slam','cast','nova','tele','charge','crouch','throw','fire','aim','lob','jump','spit','summon','shoot']);
+function puppetStep(e,dt){if(e._pf===O.fr)return;e._pf=O.fr;e.t+=dt;e.flash=Math.max(0,e.flash-dt);const s=e._ss;
+ // changes our own abilities made to this puppet (stun / slow / launch) are reported to the host once, then the host's truth is restored
+ if(s){if(e.stun>s.stun+.05)O.stq(e,{stun:e.stun});if(e.slowT>s.slowT+.05)O.stq(e,{slowT:e.slowT,slowK:e.slowK});if(e.lvy>s.lvy+.5)O.stq(e,{lvy:e.lvy,ly:e.ly})}
+ e.slowT=0;e.slowK=0;e.lvy=0;e.ly=e._ly;e.stun=(e._fl&2)?.3:0;e.kx=e.kz=0;
+ const px=e.x,pz=e.z,k=Math.min(1,dt*12);
+ if(Math.hypot(e.tx-e.x,e.tz-e.z)>14){e.x=e.tx;e.z=e.tz;e.y=e.ty}else{e.x+=(e.tx-e.x)*k;e.z+=(e.tz-e.z)*k;e.y+=(e.ty-e.y)*k}
+ e.f+=angd(e.f,e.tf)*k;const sp=Math.hypot(e.x-px,e.z-pz)/Math.max(dt,.001);e._sp=(e._sp||0)+(sp-(e._sp||0))*.3;
+ const r=e.rig||{},atk=ARMS.has(e.st);try{walkAnim(e,dt,Math.min(e._sp,(e.spd||3)*1.5))}catch(x){}
+ if(atk&&r.armR){const kk=Math.min(1,dt*10);r.armR.rotation.x+=(-2.3-r.armR.rotation.x)*kk;if(r.armL)r.armL.rotation.x+=(-2.0-r.armL.rotation.x)*kk}
+ if(r.body){if(e.st==='charge')r.body.rotation.x=.4;else if(e.stun>0)r.body.rotation.z=Math.sin(e.t*30)*.14;else{r.body.rotation.x*=.85;r.body.rotation.z*=.85}}
+ if(e.st!==e._pst){if(ARMS.has(e.st)&&e._pst!=='wind'){try{VX.eAtk(e)}catch(x){}}e._pst=e.st}
+ e.g.position.set(e.x,e.y+(e.ly||0),e.z);e.g.rotation.y=e.f;
+ if(e.boss){if(e.engaged&&bossE!==e){bossE=e;try{$('boss').classList.add('on');$('bossname').textContent=e.bname;updateBoss(e);titleCard('BOSS',e.bname||'Boss','Fight together!');CY.shake=.8}catch(x){}}
+  else if(!e.engaged&&bossE===e){bossE=null;try{$('boss').classList.remove('on')}catch(x){}}}
+ e._ss={stun:e.stun,slowT:0,lvy:0}}
+O.stq=(e,o)=>{o.cn=e.cn;o.k='st';sendCo(o,net().host)};
+{const _j=juggle;juggle=function(e,dt){if(e.pup){puppetStep(e,dt);return}return _j.apply(this,arguments)}}
+/* guests spawn nothing of their own */
+{const _sp=spawnEnemy;spawnEnemy=function(kind,x,z,tag,key,opt){if(O.rs==='guest'&&!(opt&&opt._pup))return null;return _sp.apply(this,arguments)}}
+/* hits on a puppet: normal feedback on this machine, the real damage is applied by the host */
+{const _h=hurtEnemy;hurtEnemy=function(e,dmg,dx,dz,kb,crit){
+  if(e&&e.pup&&!e.dead){const real=e.hp;e.hp=real+1e7;let used=0;try{_h.apply(this,arguments);used=real+1e7-e.hp}finally{e.hp=Math.max(1,real-used);if(e.boss&&bossE===e)try{updateBoss(e)}catch(x){}}
+   if(used>0)O.hits.push([e.cn,+(+dmg).toFixed(1),+(+dx||0).toFixed(2),+(+dz||0).toFixed(2),+(+kb||0).toFixed(1),crit?1:0]);return}
+  return _h.apply(this,arguments)}}
+/* a wipe must not reset the boss while a teammate is still fighting it */
+{const _d=die;die=function(){let b=null;if(O.rs!=='solo'&&bossE&&O.pc.some(p=>!p.dead)){b=bossE;bossE=null}try{return _d.apply(this,arguments)}finally{if(b)bossE=b}}}
+/* destructible anchors are shared too */
+if(typeof hurtAnchor==='function'){const _a=hurtAnchor;hurtAnchor=function(a,dmg){const was=a&&a.dead,r=_a.apply(this,arguments);try{if(a&&!was&&a.dead&&!O.rx&&O.rs!=='solo'){const m={k:'ak',id:a.o.id};if(O.rs==='host')sendCo(m);else sendCo(m,net().host)}}catch(x){}return r}}
+function remoteAnchor(id){for(const a of ANCH)if(a.o&&a.o.id===id&&!a.dead){O.rx=true;try{hurtAnchor(a,1e9)}finally{O.rx=false}return true}return false}
+/* ---------------- messages ---------------- */
+function onCo(m){const d=m.d;if(!d||typeof d.k!=='string')return;const from=m.from,n=net();
+ if(O.rs==='host'){ // from a guest
+  if(d.k==='need'){if(!ok())return;assign();const es=[];for(const e of ENEM)if(!e.dead&&e.cn!=null)es.push(detail(e));sendCo(Object.assign({k:'hi',es},progress()),from);return}
+  if(!ok())return;
+  if(d.k==='pg'){mergeProgress(d,false);sendCo(Object.assign({k:'pr'},progress()));return}
+  if(d.k==='h')return applyHits(d.hs);
+  if(d.k==='st')return applyStatus(d);
+  if(d.k==='ak'){if(remoteAnchor(d.id))sendCo({k:'ak',id:d.id});return}
+  return}
+ if(O.rs!=='guest'||from!==n.host||!ok())return;
+ switch(d.k){
+  case'hi':{for(const x of d.es||[])mkPuppet(x);const have=new Set((d.es||[]).map(x=>x.cn));for(const e of[...O.pup.values()])if(!have.has(e.cn))dropPuppet(e);mergeProgress(d,!O.got);O.got=true;break}
+  case'sp':for(const x of d.es||[])mkPuppet(x);break;
+  case's':applySnap(d.e||[]);break;
+  case'kl':{const e=O.pup.get(d.cn);if(e)applyKill(e);break}
+  case'fu':{const have=new Set(d.cn||[]);let miss=false;for(const c of have)if(!O.pup.has(c))miss=true;for(const e of[...O.pup.values()])if(!have.has(e.cn))applyKill(e);mergeProgress(d,false);if(miss&&performance.now()-O.needT>1200){O.needT=performance.now();sendCo({k:'need'},n.host)}break}
+  case'pd':{O.stat.pd++;if(!P.dead)hurtPlayer(+d.d||1,+d.sx||P.x,+d.sz||P.z,d.kb===undefined?6:+d.kb,!!d.ub);break}
+  case'bm':{O.relayIn=true;try{boomAt(d.x,d.z,d.r,d.d,d.c,d.y===null?undefined:d.y)}finally{O.relayIn=false}break}
+  case'sw':{O.relayIn=true;try{shockwave(d.x,d.z,d.sp,d.mx,d.d,d.c,d.y===null?undefined:d.y)}finally{O.relayIn=false}break}
+  case'tl':{O.relayIn=true;try{telegraph(d.x,d.z,d.r,d.t,null,d.c===null?undefined:d.c)}finally{O.relayIn=false}break}
+  case'pj':{try{const col=d.c||0xd8a8ff,m2=new THREE.Mesh(new THREE.SphereGeometry(.22,8,6),new THREE.MeshBasicMaterial({color:col}));try{m2.add(HUB.prim.halo(d.c||0xb36bff,1.8,0,0,0,.9))}catch(x){}RT.root.add(m2);
+   PRJ.push({m:m2,x:d.x,y:d.y,z:d.z,vx:d.vx,vy:d.vy,vz:d.vz,life:d.l,dmg:d.d,col:d.c||undefined,grav:d.g||0,_r:1});m2.position.set(d.x,d.y,d.z)}catch(x){}break}
+  case'pr':mergeProgress(d,false);break
+  case'ak':remoteAnchor(d.id);break}}
+/* ---------------- per frame ---------------- */
+function resetScene(){O.pup.clear();O.byCn.clear();O.seq=0;O.got=false;O.hits.length=0;O.sup=0;O.hc=0;O.tgt=null;O.spT=0;O.fuT=0;O.needT=0}
+function becomeGuest(){O.stat.demoted++;resetScene();
+ for(let i=ENEM.length-1;i>=0;i--){const e=ENEM[i];if(e.pup)continue;try{EG.remove(e.g)}catch(x){}ENEM.splice(i,1)}
+ bossE=null;try{$('boss').classList.remove('on')}catch(x){}
+ for(const r of[PRJ,WAVE,TELE]){for(const q of r){try{RT.root.remove(q.m)}catch(x){}}r.length=0}
+ toast('<b>Shared enemies</b> · '+esc(nameOf(net().host))+' is hosting this room');sendCo({k:'need'},net().host);O.needT=performance.now()}
+function promote(){O.stat.promoted++;const mine=[...O.pup.values()];O.pup.clear();O.byCn.clear();O.seq=0;
+ for(const e of mine){e.pup=0;e.cn=null;e.slowT=0;e.stun=0;e.ly=e._ly||0;e.lvy=0;e.kx=e.kz=0;e._tg=null}
+ for(const e of ENEM)if(e.cn!=null&&!e.pup){e.cn=null}
+ try{if(typeof SPW!=='undefined')for(const s of SPW.slots){if(s.e&&!s.e.dead)continue;const e=ENEM.find(q=>!q.dead&&q.key===s.key);if(e){s.e=e;s.t=0}}}catch(x){}
+ toast('<b>Shared enemies</b> · you are now hosting')}
+function frame(dt){O.fr++;const r=calc(),prev=O.rs,n=net();
+ if(ok()){const sig=S.id+'|'+(RT.root&&RT.root.id);if(sig!==O.sid){O.sid=sig;resetScene()}}
+ if(r!==prev||(r==='guest'&&n&&n.host!==O.hid)){
+  if(r==='guest'){O.rs='guest';if(prev==='guest'){for(const e of[...O.pup.values()])dropPuppet(e);O.got=false;O.pup.clear();toast('<b>Shared enemies</b> · '+esc(nameOf(n.host))+' is now hosting');sendCo({k:'need'},n.host);O.needT=performance.now()}else becomeGuest()}
+  else{O.rs=r;if(prev==='guest')promote();else if(r==='host'&&prev==='solo'){O.seq=0;O.byCn.clear();for(const e of ENEM)e.cn=null;O.spT=0;O.fuT=1.5;toast('<b>Shared enemies</b> · you are hosting — your party sees the same foes')}}}
+ O.hid=n?n.host:null;
+ if(O.rs==='solo')return;
+ O.pc=n?n.peers():[];
+ if(O.rs==='guest'){if(!O.got&&performance.now()-O.needT>1500&&ok()){O.needT=performance.now();sendCo({k:'need'},n.host)}}}
+function flush(dt){if(O.rs==='guest'&&O.hits.length){const hs=O.hits.splice(0,40);sendCo({k:'h',hs},net().host)}
+ if(ok())try{progTick(dt)}catch(x){console.error('coop prog',x)}
+ if(O.rs==='host'&&ok())try{hostFrame(dt)}catch(x){console.error('coop host',x)}}
+{const _u=updEnemies;updEnemies=function(dt){try{frame(dt)}catch(x){console.error('coop',x)}const r=_u.apply(this,arguments);try{flush(dt)}catch(x){console.error('coop flush',x)}return r}}
+/* a scene change starts with a clean slate: until the server says who is in the new room we are solo (so the scene builds normally) */
+{const _l=loadScene;loadScene=function(){const n=net();if(n){n.host=null;n.roomCount=1}O.rs='solo';O.hid=null;resetScene();return _l.apply(this,arguments)}}
+{const n=net();if(n){n.on_('co',onCo);n.on_('host',()=>{})}}
+O.dump=()=>({rs:O.rs,pup:O.pup.size,byCn:O.byCn.size,peers:O.pc.length,seq:O.seq,got:O.got,stat:O.stat});
+return O})();
+
+</script>
+<script id="nca-atlas">
+/* ============ ATLAS · the Hub Atlas — a showcase of every player's published hub (Campaign + Multiplayer) ============
+   * A domed observatory on the south lawn of the central hub (added to existing saves automatically). Walk up and interact.
+   * The Atlas menu lists every public player hub saved on the server: a sky-view shot, the owner, the monsters inside,
+     the objectives, plays, likes, full clears, best / average clear time, how many players are exploring it right now.
+   * ▶ Play loads the hub straight from the menu. ♥ Like (one per account). A clear (every objective scene in the hub
+     completed in one visit) is reported to the server and counted once per player per few hours.
+   * Multiplayer: pressing 💾 Save in the Dungeon Forge also publishes the hub (with a fresh sky-view shot) to the Atlas;
+     "My hub" lets the owner unlist / relist it. Campaign: browse + play over plain HTTP, likes use the multiplayer login if
+     this browser has one. All stats are kept by the server (server.js · Hub Atlas). */
+const ATLAS=(()=>{
+const O={run:null};
+const MP=()=>typeof NET!=='undefined'&&NET.mp();
+const WS=()=>MP()&&NET.authed;
+const base=()=>{try{return NET.httpUrl()||''}catch(e){return ''}};
+const E=s=>typeof esc==='function'?esc(String(s==null?'':s)):String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>(n|0).toLocaleString('en-US');
+const mmss=s=>{s=s|0;return s>=3600?Math.floor(s/3600)+'h '+String(Math.floor(s%3600/60)).padStart(2,'0')+'m':Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const ago=t=>{if(!t)return '—';const d=(Date.now()-t)/1000;if(d<60)return 'just now';if(d<3600)return Math.floor(d/60)+' min ago';if(d<86400)return Math.floor(d/3600)+' h ago';if(d<86400*30)return Math.floor(d/86400)+' days ago';return new Date(t).toLocaleDateString()};
+const token=()=>{try{if(MP()){const a=NET.acct();return a&&a.token||''}const j=JSON.parse(localStorage.getItem('nca_acct__mp')||'null');return j&&j.token||''}catch(e){return ''}};
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}};
+
+/* ===================================================================== the building ===================================================================== */
+function makeAtlas(M){const{B,Bx,Cy,Co,Sp,Tr,halo,sign,lightAt}=HUB.prim;const g=new THREE.Group(),glow=M.p.glow;
+ g.add(B(Cy(5.5,5.8,.5,28),M.stone,0,.25,0),B(Cy(4.95,5.15,.42,28),M.trim,0,.71,0),B(Cy(4.7,4.7,.1,28),M.dark,0,.95,0));
+ g.add(B(Bx(3.2,.25,1.4),M.stone,0,.125,5.75),B(Bx(2.6,.25,1.0),M.stone,0,.375,5.35),B(Bx(2.2,.22,.7),M.stone,0,.6,5.05));
+ for(let i=0;i<8;i++){const a=i/8*Math.PI*2+Math.PI/8,x=Math.sin(a)*4.15,z=Math.cos(a)*4.15;
+  g.add(B(Bx(.95,.32,.95),M.stone,x,1.12,z),B(Cy(.3,.36,4.5,8),M.wall,x,3.5,z),B(Bx(.9,.28,.9),M.gold,x,5.86,z),B(Cy(.33,.33,.1,8),M.gold,x,1.4,z))}
+ g.add(B(Tr(4.18,.3,6,40),M.trim,0,6.08,0,Math.PI/2),B(Tr(4.18,.12,5,40),M.gold,0,6.32,0,Math.PI/2));
+ for(let i=0;i<4;i++)g.add(B(Tr(4.18,.1,4,30,Math.PI),M.gold,0,6.1,0,0,i*Math.PI/4,0));
+ g.add(B(Sp(.5,10),M.gold,0,10.35,0),B(Co(.24,1.1,6),M.gold,0,11.15,0));const st=halo(glow,2.2,0,11.8,0,.7);st.userData.anim=(o,t)=>{o.material.opacity=.5+.25*Math.sin(t*2.2)};g.add(st);
+ g.add(B(Cy(.85,1.15,1.5,10),M.stone,0,1.75,0),B(Cy(1.2,1.2,.16,14),M.gold,0,2.55,0),B(Cy(1.05,1.05,.06,14),M.dark,0,2.64,0));
+ const holo=new THREE.Group();holo.position.y=4.15;
+ const core=new THREE.Mesh(new THREE.SphereGeometry(1.15,18,12),new THREE.MeshStandardMaterial({color:0x10204a,emissive:glow,emissiveIntensity:.35,roughness:.3,metalness:.2,transparent:true,opacity:.85,flatShading:true}));
+ const wire=new THREE.Mesh(new THREE.SphereGeometry(1.24,16,10),new THREE.MeshBasicMaterial({color:glow,wireframe:true,transparent:true,opacity:.5}));wire.userData.noOutline=1;holo.add(core,wire);
+ const orb=new THREE.Group();const iso=[[2.3,.2,0],[2.1,-.35,1.3],[2.4,.45,2.5],[2.2,-.1,3.8],[2.5,.3,5.1]];
+ for(const[r,y,a]of iso){const k=new THREE.Group();k.position.set(Math.cos(a)*r,y,Math.sin(a)*r);
+  k.add(B(Cy(.34,.18,.22,6),M.rock||M.stone,0,0,0),B(Cy(.3,.3,.04,6),M.moss||M.trim,0,.12,0),B(Bx(.12,.3,.12),M.wall,.06,.28,.02),B(Co(.1,.14,4),M.roof,.06,.5,.02));orb.add(k)}
+ holo.add(orb);const ring=new THREE.Mesh(new THREE.TorusGeometry(1.75,.025,4,48),new THREE.MeshBasicMaterial({color:glow,transparent:true,opacity:.6}));ring.rotation.x=Math.PI/2.2;ring.userData.noOutline=1;holo.add(ring);
+ holo.userData.anim=(o,t)=>{o.position.y=4.15+Math.sin(t*1.25)*.12;core.rotation.y=t*.3;wire.rotation.y=-t*.18;orb.rotation.y=t*.42;ring.rotation.z=t*.25};
+ g.add(holo,halo(glow,5.5,0,4.15,0,.32));const beam=new THREE.Mesh(new THREE.CylinderGeometry(.55,1.0,1.4,16,1,true),new THREE.MeshBasicMaterial({color:glow,transparent:true,opacity:.18,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));beam.position.y=3.35;beam.userData.noOutline=1;g.add(beam);
+ try{lightAt(g,glow,2.4,12)}catch(e){}
+ g.add(sign(M,'HUB ATLAS',0,1.95,3.95,2.6));
+ for(const sx of[-1,1]){g.add(B(Cy(.16,.22,1.6,6),M.dark,sx*2.1,.8,6.1),B(Cy(.3,.2,.26,8),M.gold,sx*2.1,1.68,6.1));const f=halo(0x8ad8ff,1.6,sx*2.1,1.95,6.1,.85);f.userData.anim=(o,t)=>{o.material.opacity=.6+.25*Math.sin(t*3+sx)};g.add(f)}
+ try{g.add(HUB.emitter('runes',{x:0,y:3.2,z:0,box:[2.6,1.6,2.6],h:3,n:14,seed:41}))}catch(e){}
+ return g}
+const col=[['c',0,0,5.7,.5],['c',0,0,5.05,.95],['b',0,5.75,3.2,1.4,.25,0,0],['b',0,5.35,2.6,1.0,.5,0,0],['b',0,5.05,2.2,.7,.72,0,0],['c',0,0,1.2,2.7]];
+for(let i=0;i<8;i++){const a=i/8*Math.PI*2+Math.PI/8;col.push(['c',Math.sin(a)*4.15,Math.cos(a)*4.15,.5,6.2])}
+try{HUB.def('atlas','Town','Hub Atlas','Browse, like and play the hubs other players have built and published. Each one shows a sky-view preview, its monsters, objectives and stats.',makeAtlas,{col,ds:1})}catch(e){console.error('atlas model',e)}
+
+/* ---- placed on the south lawn of the central hub, facing the plaza; existing saves get it once (hub.atlasV) ---- */
+const AT={x:17,z:33,r:12,flat:7.2};
+const DECOR=new Set(['tree','oak','bigpine','dead','bush','fbush','fern','tuft','flowers','mush','stump','log','boulder','rocks','reeds','stones','crates','barrels','grass']);
+O.migrate=function(){const hub=DB.scenes&&DB.scenes.hub;if(!hub||!hub.h||hub.atlasV===1)return false;
+ if(!hub.objs.some(o=>o.k==='atlas')){const w=hub.w,d=hub.d,vx=w+1,hs=[];
+  for(let j=0;j<=d;j++)for(let i=0;i<=w;i++){const x=i-w/2,z=j-d/2;if(Math.hypot(x-AT.x,z-AT.z)<=AT.flat)hs.push(hub.h[j*vx+i]|0)}
+  hs.sort((a,b)=>a-b);const tgt=hs.length?hs[hs.length>>1]:0;
+  for(let j=0;j<=d;j++)for(let i=0;i<=w;i++){const x=i-w/2,z=j-d/2,dd=Math.hypot(x-AT.x,z-AT.z);if(dd>=AT.r)continue;const t=dd<=AT.flat?1:1-(dd-AT.flat)/(AT.r-AT.flat),sm=t*t*(3-2*t),k=j*vx+i;hub.h[k]=Math.round((hub.h[k]|0)+(tgt-(hub.h[k]|0))*sm)}
+  hub.objs=hub.objs.filter(o=>!(DECOR.has(o.k)&&Math.hypot(o.x-AT.x,o.z-AT.z)<AT.r+1));
+  const face=(x,z)=>Math.atan2(-x,-z),r=face(AT.x,AT.z);hub.objs.push(newObj('atlas',AT.x,AT.z,{r}));
+  const ux=-AT.x/Math.hypot(AT.x,AT.z),uz=-AT.z/Math.hypot(AT.x,AT.z),px=-uz,pz=ux,add=(k,x,z,o)=>hub.objs.push(newObj(k,x,z,o||{}));
+  for(const t of[8.4,11.6])for(const s of[-1,1])add('lamp',AT.x+ux*t+px*2.6*s,AT.z+uz*t+pz*2.6*s,{r});
+  add('signpost',AT.x+ux*13.5+px*3.6,AT.z+uz*13.5+pz*3.6,{r:r+.5});
+  for(const s of[-1,1])add('fbush',AT.x+px*7.2*s-ux*1.5,AT.z+pz*7.2*s-uz*1.5)}
+ hub.atlasV=1;try{persist()}catch(e){}return true};
+{const _ec=ensureChapters;ensureChapters=function(){const r=_ec.apply(this,arguments);try{O.migrate()}catch(e){console.error('atlas place',e)}return r}}
+{const _si=storyInteract;storyInteract=function(cand){_si.apply(this,arguments);if(!S||S.id!=='hub'||S.visit)return;const o=S.objs.find(o=>o.k==='atlas');if(o)cand('bld',o,8.2,'Open the <b>Hub Atlas</b> <i>browse · like · play player hubs</i>',()=>O.open())}}
+try{TUT.hub.push(['🗺','Hub Atlas','The domed observatory on the south lawn shows every hub other players have published — sky-view previews, monsters, objectives, likes and clears. Pick one and press <b>▶ Play</b>.'])}catch(e){}
+
+/* ===================================================================== the menu ===================================================================== */
+const U=NETUI;
+(function css(){const s=document.createElement('style');s.textContent=`
+#atlp.np.wide{width:min(1120px,96vw)}
+#atlp .nb{padding-bottom:14px}
+.at-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.at-bar .tabs2{margin:0;flex:1;min-width:0;flex-wrap:wrap}
+.at-q{flex:0 1 220px;min-width:150px;padding:8px 12px;border-radius:10px;border:1px solid var(--ln);background:rgba(0,0,0,.35);color:#fff;font:600 13px var(--f)}
+.at-sub{margin:0 0 10px;font-size:12.5px;color:var(--mu)}
+.at-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+.at-card{position:relative;border:1px solid rgba(120,160,255,.25);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,rgba(24,30,72,.92),rgba(9,11,28,.96));cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s;text-align:left;padding:0;color:inherit;font:inherit}
+.at-card:hover,.at-card:focus-visible{transform:translateY(-2px);border-color:var(--go);box-shadow:0 8px 30px rgba(0,0,0,.45),0 0 22px rgba(255,201,74,.18)}
+.at-card.feat{grid-column:span 2;border-color:rgba(255,201,74,.55)}.at-card.feat .at-img{aspect-ratio:16/8}html.mob .at-card.feat .at-img{aspect-ratio:16/6.5}html.mob .at-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.at-img{position:relative;aspect-ratio:16/10;background:radial-gradient(120% 90% at 50% 20%,#24306a,#070a1c);overflow:hidden}
+.at-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.at-img .at-ph{position:absolute;inset:0;display:grid;place-items:center;font-size:44px;opacity:.35}
+.at-tags{position:absolute;left:8px;top:8px;display:flex;gap:5px;flex-wrap:wrap}
+.at-tag{font:800 10.5px var(--f);letter-spacing:.08em;padding:3px 7px;border-radius:7px;background:rgba(6,9,24,.82);border:1px solid var(--ln);color:#dfe6ff}
+.at-tag.go{color:#10142b;background:var(--go);border-color:var(--go)}.at-tag.cy{color:#001;background:var(--cy);border-color:var(--cy)}.at-tag.gr{color:#8dffb8;border-color:rgba(120,255,180,.5)}
+.at-b{padding:8px 11px 11px}
+.at-t{font:700 15.5px var(--fs);letter-spacing:.04em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at-by{font-size:12px;color:var(--mu);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.at-by b{color:#dfe6ff}
+.at-st{display:flex;gap:11px;font:700 12.5px var(--f);margin-top:7px;color:#cfd8ff}.at-st span{white-space:nowrap}.at-st .lk{color:#ff7a96}.at-st .dn{color:var(--go)}
+.at-mon{display:flex;gap:4px;margin-top:7px;min-height:26px;align-items:center}
+.at-mon img{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);object-fit:cover}
+.at-mon img.bs{border-color:#ff5a7a;box-shadow:0 0 8px rgba(255,90,122,.5)}
+.at-mon small{font-size:11px;color:var(--mu);margin-left:2px}
+.at-more{display:flex;justify-content:center;margin-top:14px}
+.at-empty{padding:30px 10px;text-align:center;color:var(--mu)}.at-empty b{display:block;font:700 18px var(--fs);color:#fff;margin-bottom:6px}
+.at-d{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px}
+@media(max-width:820px){.at-d{grid-template-columns:1fr}}
+.at-shot{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(255,201,74,.35);aspect-ratio:16/10;background:radial-gradient(120% 90% at 50% 20%,#24306a,#070a1c)}
+.at-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.at-shot .at-ph{position:absolute;inset:0;display:grid;place-items:center;font-size:60px;opacity:.3}
+.at-shot .at-cap{position:absolute;left:0;right:0;bottom:0;padding:22px 14px 10px;background:linear-gradient(transparent,rgba(4,6,18,.92));font:700 11px var(--f);letter-spacing:.18em;color:#cfe8ff}
+.at-h1{font:700 24px var(--fs);letter-spacing:.05em;color:#fff;margin:0}
+.at-desc{margin:6px 0 0;font-size:13.5px;line-height:1.45;color:#dfe6ff}
+.at-own{display:flex;gap:11px;align-items:center;margin:12px 0}
+.at-own img{width:54px;height:54px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--ln);object-fit:cover}
+.at-own b{font-size:15px}.at-own small{display:block;color:var(--mu);font-size:12px}.at-own .on{color:#6dffb4}
+.at-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.at-n{padding:8px 6px;border-radius:11px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);text-align:center}
+.at-n b{display:block;font:800 19px var(--f);color:#fff}.at-n small{font-size:10.5px;letter-spacing:.12em;color:var(--mu);text-transform:uppercase}
+.at-n.lk b{color:#ff7a96}.at-n.dn b{color:var(--go)}.at-n.pl b{color:var(--cy)}
+.at-acts{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+.at-acts .pb{padding:10px 16px;font-size:14.5px}
+.at-acts .lk.on{background:rgba(255,90,122,.22);border-color:#ff7a96;color:#fff}
+.at-sec{margin-top:14px}.at-sec h4{margin:0 0 7px;font:700 11.5px var(--f);letter-spacing:.22em;color:var(--go)}
+.at-ml{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.at-m{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}
+.at-m img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.06)}
+.at-m b{font-size:13px}.at-m small{display:block;font-size:11px;color:var(--mu)}.at-m.bs{border-color:rgba(255,90,122,.45)}.at-m.bs small{color:#ff8aa4}
+.at-ob{padding:8px 10px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);margin-bottom:7px}
+.at-ob h5{margin:0 0 5px;font:700 13px var(--f);color:#fff}.at-ob h5 small{color:var(--mu);font-weight:600;margin-left:6px}
+.at-ob ol{margin:0;padding-left:0;list-style:none}.at-ob li{display:flex;gap:7px;font-size:12.5px;line-height:1.5;color:#dfe6ff}.at-ob li i{font-style:normal;width:18px;text-align:center}
+.at-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px}.at-kv span{color:var(--mu)}.at-kv b{color:#e8ecff;font-weight:600}
+.at-chips{display:flex;gap:5px;flex-wrap:wrap}.at-chips span{font:600 11.5px var(--f);padding:3px 8px;border-radius:7px;background:rgba(255,255,255,.06);border:1px solid var(--ln)}
+.at-danger{color:#ff8a8a;letter-spacing:.1em}
+.at-back{margin-bottom:10px}
+#atl-chip{position:fixed;left:50%;top:118px;transform:translateX(-50%);z-index:29;display:none;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:999px;background:rgba(8,12,32,.86);border:1px solid rgba(255,201,74,.5);box-shadow:0 0 22px rgba(255,201,74,.18);backdrop-filter:blur(6px);font:600 13px var(--f);color:#e8ecff;max-width:94vw;white-space:nowrap}
+#atl-chip.on{display:flex}#atl-chip b{color:#fff}#atl-chip .mu{color:var(--mu)}
+#atl-chip button{border:1px solid var(--ln);background:rgba(255,255,255,.06);color:#fff;border-radius:999px;padding:5px 11px;font:700 12px var(--f);cursor:pointer}
+#atl-chip button.lk.on{background:rgba(255,90,122,.25);border-color:#ff7a96}
+body.build #atl-chip,body.mm #atl-chip{display:none!important}
+`;document.head.appendChild(s)})();
+const P=U.mk('atlp','🗺 HUB ATLAS',true);
+if(U.panels&&!U.panels.includes('atlp'))U.panels.push('atlp');
+U.onClose=U.onClose||{};U.onClose.atlp=()=>{if(O._paused){window.__pause=O._prevPause;O._paused=false}};
+const body=()=>P.querySelector('.nb');
+const TABS=[['top','★ Featured'],['liked','♥ Most liked'],['played','▶ Most played'],['done','🏆 Most cleared'],['new','✦ Newest'],['mine','🏠 My hub']];
+const st={sort:'top',q:'',page:0,rows:[],total:0,loading:false,err:'',view:'list',sel:null,mine:undefined};
+O.open=function(){U.open('atlp');if(!O._paused){O._prevPause=!!window.__pause;window.__pause=true;O._paused=true}st.view='list';if(!st.rows.length||Date.now()-(st.at||0)>20000)load(true);else render();try{if(document.pointerLockElement)document.exitPointerLock()}catch(e){}};
+O.close=()=>U.close('atlp');
+function api(path,opt){const b=base();if(!b)return Promise.reject(new Error('noserver'));const h=Object.assign({},opt&&opt.body?{'content-type':'application/json'}:{});const t=token();if(t)h['x-token']=t;
+ const ctl=new AbortController();setTimeout(()=>ctl.abort(),9000);return fetch(b+path,{method:opt&&opt.body?'POST':'GET',headers:h,body:opt&&opt.body?JSON.stringify(opt.body):undefined,signal:ctl.signal}).then(r=>r.json().then(j=>{if(!r.ok&&!j.error)j.error='HTTP '+r.status;return j}))}
+function load(reset){if(reset){st.page=0;st.rows=[];st.total=0}st.err='';
+ if(st.sort==='mine'){st.loading=true;render();if(WS())NET.send({t:'atlas',op:'mine'});else{st.loading=false;st.mine=null;render()}return}
+ st.loading=true;render();
+ if(WS()){NET.send({t:'atlas',op:'list',sort:st.sort,q:st.q,page:st.page});return}
+ api(`/atlas?sort=${encodeURIComponent(st.sort)}&q=${encodeURIComponent(st.q)}&page=${st.page}`).then(onList).catch(e=>{st.loading=false;st.err=e.message==='noserver'?'No online server is configured, so there are no player hubs to show.':'The Atlas server can’t be reached right now — try again in a moment.';render()})}
+function onList(m){st.loading=false;st.at=Date.now();if(!m||m.ok===false){st.err=(m&&m.error)||'Could not load the Atlas.';render();return}if(m.sort&&m.sort!==st.sort)return;
+ const seen=new Set(st.rows.map(r=>r.id));for(const r of m.rows||[])if(!seen.has(r.id))st.rows.push(r);st.total=m.total|0;render()}
+function upd(row){if(!row)return;const i=st.rows.findIndex(r=>r.id===row.id);if(i>=0)st.rows[i]=row;if(st.sel&&st.sel.id===row.id)st.sel=row;if(row.mine)st.mine=row;if(O.run&&O.run.id===row.id){O.run.row=row;chip()}}
+if(typeof NET!=='undefined')NET.on_('atlas',m=>{if(m.op==='list')onList(m);else if(m.op==='mine'){st.loading=false;st.mine=m.row;render()}else if(m.op==='entry'){upd(m.row);if(U.isOpen('atlp'))render();if(m.cleared!==undefined)O._lastClear=m}else if(m.op==='gone'){toast('That hub is no longer listed.','bad');st.rows=st.rows.filter(r=>r.id!==m.id);if(st.sel&&st.sel.id===m.id){st.view='list';st.sel=null}render()}});
+/* ---------- pieces ---------- */
+const HT={};const heroImg=k=>{if(HT[k]!==undefined)return HT[k];try{return HT[k]=heroThumb(k)}catch(e){return HT[k]=''}};
+const monImg=k=>{try{return kindTh(k)||''}catch(e){return ''}};
+const monName=k=>{try{const n=(EDEF[k]&&EDEF[k].name)||(CATI[k]&&CATI[k].name)||k;return String(n).split(',')[0].replace(/(^|[\s-])\w/g,c=>c.toUpperCase())}catch(e){return k}};
+const isBoss=k=>{try{return !!(EDEF[k]&&EDEF[k].boss)}catch(e){return false}};
+const KN=k=>{try{return KITS[k]?KITS[k].name:k}catch(e){return k}};
+function monsters(row){const m=row.meta||{},list=[];for(const[k,n]of Object.entries(m.mon||{}))list.push({k,n,boss:isBoss(k)});for(const[k,n]of Object.entries(m.boss||{}))list.push({k,n,boss:true,sp:1});
+ const by={};for(const x of list){const o=by[x.k]||(by[x.k]={k:x.k,n:0,boss:false});o.n+=x.n;o.boss=o.boss||x.boss}return Object.values(by).sort((a,b)=>(b.boss-a.boss)||b.n-a.n)}
+function danger(row){let s=0;for(const m of monsters(row)){const D=(typeof EDEF!=='undefined'&&EDEF[m.k])||{hp:80};s+=m.boss?28*m.n:m.n*Math.max(.4,(D.hp||80)/70)}const lv=s<=0?0:s<8?1:s<20?2:s<40?3:s<70?4:5;return lv}
+const skulls=n=>n?'☠'.repeat(n)+'<span style="opacity:.25">'+'☠'.repeat(5-n)+'</span>':'<span class="mu">peaceful</span>';
+const shotUrl=row=>row.shot?base()+'/atlas/shot/'+encodeURIComponent(row.id)+'.jpg?v='+row.shot:'';
+const STEPI={kill:'⚔',boss:'👑',destroy:'💥',reach:'📍',talk:'💬',collect:'✦',chest:'🎁',relic:'🔮',altar:'🕯',gate:'🚪'};
+function tags(row,i){const t=[];if(st.sort==='top'&&i===0&&!st.q)t.push('<span class="at-tag go">★ FEATURED</span>');if(row.first&&Date.now()-row.first<3*864e5)t.push('<span class="at-tag cy">NEW</span>');if(row.here)t.push(`<span class="at-tag gr">● ${row.here} exploring</span>`);if(row.mine)t.push('<span class="at-tag">YOURS</span>');return t.join('')}
+function card(row,i){const ms=monsters(row),u=shotUrl(row);
+ return `<button class="at-card ${st.sort==='top'&&i===0&&!st.q?'feat':''}" data-id="${E(row.id)}"><div class="at-img">${u?`<img loading="lazy" src="${u}" alt="">`:'<div class="at-ph">🏰</div>'}<div class="at-tags">${tags(row,i)}</div></div>
+ <div class="at-b"><div class="at-t">${E(row.title)}</div><div class="at-by">by ${row.tag?'<span style="color:var(--go)">['+E(row.tag)+']</span> ':''}<b>${E(row.name)}</b> · ${row.meta&&row.meta.scenes>1?row.meta.scenes+' scenes':'1 scene'}</div>
+ <div class="at-st"><span title="Plays">▶ ${fmt(row.plays)}</span><span class="lk" title="Likes">${row.liked?'♥':'♡'} ${fmt(row.likes)}</span><span class="dn" title="Full clears">🏆 ${fmt(row.done)}</span>${row.meta&&row.meta.quests?'':'<span class="mu" style="font-weight:600">free roam</span>'}</div>
+ <div class="at-mon">${ms.slice(0,7).map(m=>`<img class="${m.boss?'bs':''}" src="${monImg(m.k)}" title="${E(monName(m.k))} ×${m.n}" alt="">`).join('')}${ms.length>7?`<small>+${ms.length-7}</small>`:''}${ms.length?'':'<small>No monsters — a place to explore</small>'}</div></div></button>`}
+function listView(){const b=[];const tabs=TABS.map(([k,n])=>`<button data-s="${k}" class="${st.sort===k?'on':''}">${n}</button>`).join('');
+ b.push(`<div class="at-bar"><div class="tabs2">${tabs}</div>${st.sort==='mine'?'':`<input class="at-q" id="at-q" placeholder="Search hubs or builders…" value="${E(st.q)}" maxlength="24">`}</div>`);
+ if(st.sort==='mine')return b.join('')+mineView();
+ b.push(`<p class="at-sub">${MP()?'':'Campaign view · '}Every hub below was built in the Dungeon Forge and published by its player. ${st.total?`<b>${fmt(st.total)}</b> hub${st.total===1?'':'s'} listed.`:''} Tap a hub for its preview, monsters and objectives.</p>`);
+ if(st.err)b.push(`<div class="at-empty"><b>Atlas unavailable</b>${E(st.err)}</div>`);
+ else if(!st.rows.length&&st.loading)b.push('<div class="at-empty"><b>Unrolling the Atlas…</b>Fetching the latest hubs.</div>');
+ else if(!st.rows.length)b.push(`<div class="at-empty"><b>${st.q?'No hubs match that search':'No hubs published yet'}</b>${st.q?'Try another name.':MP()?'Be the first: build in the Dungeon Forge (Builder’s Portal, east of the plaza) and press 💾 Save — it appears here.':'Hubs appear here once players publish them from Multiplayer.'}</div>`);
+ else{b.push(`<div class="at-grid">${st.rows.map(card).join('')}</div>`);if(st.rows.length<st.total)b.push(`<div class="at-more"><button class="pb ghost" data-a="more">${st.loading?'Loading…':'Show more hubs'}</button></div>`)}
+ return b.join('')}
+function detailView(row){const m=row.meta||{},ms=monsters(row),u=shotUrl(row),rate=row.plays?Math.round(row.done/row.plays*100):0,dg=danger(row);
+ const ownLine=`${row.tag?'<span style="color:var(--go)">['+E(row.tag)+']</span> ':''}<b>${E(row.name)}</b>${MP()&&row.online?' <span class="on">● online</span>':''}<small>${E(KN(row.hero))} · Level ${row.lv|0}${row.pr?' · ♛ '+row.pr:''}</small>`;
+ const likeBtn=row.mine?'<button class="pb ghost" disabled title="You can’t like your own hub">♥ '+fmt(row.likes)+'</button>':`<button class="pb ghost lk ${row.liked?'on':''}" data-a="like">${row.liked?'♥ Liked':'♡ Like'} · ${fmt(row.likes)}</button>`;
+ return `<button class="pb sm ghost at-back" data-a="back">← All hubs</button><div class="at-d"><div>
+ <div class="at-shot">${u?`<img src="${u}" alt="Sky view of ${E(row.title)}">`:'<div class="at-ph">🏰</div>'}<div class="at-cap">SKY VIEW · ${E((m.names&&m.names[0])||row.title).toUpperCase()}${row.here?` · ● ${row.here} EXPLORING NOW`:''}</div></div>
+ <div class="at-sec"><h4>MONSTERS ${ms.length?'· '+ms.reduce((a,x)=>a+x.n,0):''}</h4>${ms.length?`<div class="at-ml">${ms.map(x=>`<div class="at-m ${x.boss?'bs':''}"><img src="${monImg(x.k)}" alt=""><div><b>${E(monName(x.k))}</b><small>${x.boss?'Boss · ':''}×${x.n}</small></div></div>`).join('')}</div>`:'<p class="mu" style="margin:0">No monsters — a peaceful hub to explore.</p>'}${ms.length?'<p class="mu" style="margin:6px 0 0;font-size:11.5px">Spawners respawn their foes; counts show how many each keeps alive.</p>':''}</div>
+ <div class="at-sec"><h4>OBJECTIVES ${m.quests?'· '+m.quests+' quest'+(m.quests>1?'s':''):''}</h4>${(m.obj||[]).length?(m.obj||[]).map(q=>`<div class="at-ob"><h5>${E(q.title||q.scene)}<small>${E(q.scene)}</small></h5><ol>${q.steps.map(s=>`<li><i>${STEPI[s.type]||'•'}</i><span>${E(s.text||s.type)}</span></li>`).join('')}</ol></div>`).join(''):'<p class="mu" style="margin:0">No objectives — free roam. (A hub can be <b>cleared</b> once its builder adds objectives.)</p>'}</div>
+ </div><div>
+ <h2 class="at-h1">${E(row.title)}</h2>${row.desc?`<p class="at-desc">${E(row.desc)}</p>`:''}
+ <div class="at-own"><img src="${heroImg(row.hero)}" alt=""><div>${ownLine}</div></div>
+ <div class="at-acts"><button class="pb" data-a="play">▶ ${row.mine?'Play my hub':'Play'}</button>${likeBtn}${MP()&&WS()&&!row.mine?'<button class="pb ghost" data-a="prof">👤 Profile</button>':''}</div>
+ <div class="at-nums"><div class="at-n pl"><b>${fmt(row.plays)}</b><small>Plays</small></div><div class="at-n lk"><b>${fmt(row.likes)}</b><small>Likes</small></div><div class="at-n dn"><b>${fmt(row.done)}</b><small>Full clears</small></div></div>
+ <div class="at-sec"><h4>DETAILS</h4><div class="at-kv">
+  <span>Danger</span><b class="at-danger">${skulls(dg)}</b>
+  <span>Clear rate</span><b>${m.quests?(row.plays?rate+'% of plays':'—'):'free roam'}</b>
+  <span>Best clear</span><b>${row.best?mmss(row.best.sec)+' · '+E(row.best.name):'—'}</b>
+  <span>Average clear</span><b>${row.avg?mmss(row.avg):'—'}</b>
+  <span>Exploring now</span><b>${row.here|0} player${(row.here|0)===1?'':'s'}</b>
+  <span>Scenes</span><b>${m.scenes|0} · ${fmt(m.objs)} objects · ${Math.round((m.area||0)/100)/10}k m²</b>
+  <span>Updated</span><b>${ago(row.updated)}</b>
+  <span>First published</span><b>${row.first?new Date(row.first).toLocaleDateString():'—'}</b></div></div>
+ ${(m.names||[]).length>1?`<div class="at-sec"><h4>SCENES</h4><div class="at-chips">${m.names.map(n=>`<span>${E(n)}</span>`).join('')}</div></div>`:''}
+ ${MP()?'':'<p class="mu" style="font-size:12px;margin-top:12px">Campaign: your clears count in the Atlas. Likes use your Multiplayer account on this browser.</p>'}
+ </div></div>`}
+function mineView(){
+ if(!MP())return `<div class="at-empty"><b>Hubs are published from Multiplayer</b>Open <b>Multiplayer</b> from the main menu, build in the <b>Dungeon Forge</b> (Builder’s Portal east of the plaza) and press <b>💾 Save</b> — your hub appears in the Atlas for everyone, in both modes.</div>`;
+ if(!NET.authed)return `<div class="at-empty"><b>Not connected</b>Connect to the server to publish your hub and see its stats.</div>`;
+ if(st.loading&&st.mine===undefined)return '<div class="at-empty"><b>Loading your hub…</b></div>';
+ const r=st.mine,pub=pubPref();
+ if(!r)return `<div class="at-empty"><b>You haven’t published a hub yet</b>Build in the <b>Dungeon Forge</b> and press <b>💾 Save</b> — it is uploaded with a sky-view preview and listed here.<div class="at-acts" style="justify-content:center"><button class="pb" data-a="forge">🏗 Go to the Dungeon Forge</button></div></div>`;
+ return `<div class="at-d"><div><div class="at-shot">${r.shot?`<img src="${shotUrl(r)}" alt="">`:'<div class="at-ph">🏰</div>'}<div class="at-cap">YOUR HUB · ${r.public?'LISTED IN THE ATLAS':'UNLISTED'}</div></div></div><div>
+ <h2 class="at-h1">${E(r.title)}</h2><p class="at-desc">${r.public?'Everyone can find and play it in the Atlas.':'Hidden from the Atlas — only you (and your party) can visit it.'} Updated ${ago(r.updated)}.</p>
+ <div class="at-nums"><div class="at-n pl"><b>${fmt(r.plays)}</b><small>Plays</small></div><div class="at-n lk"><b>${fmt(r.likes)}</b><small>Likes</small></div><div class="at-n dn"><b>${fmt(r.done)}</b><small>Full clears</small></div></div>
+ <div class="at-kv"><span>Best clear</span><b>${r.best?mmss(r.best.sec)+' · '+E(r.best.name):'—'}</b><span>Average clear</span><b>${r.avg?mmss(r.avg):'—'}</b><span>Exploring now</span><b>${r.here|0}</b><span>Objectives</span><b>${(r.meta&&r.meta.quests)?r.meta.quests+' quest scene(s) — clears are counted':'none yet — add objectives (Scene tab) so players can clear it'}</b></div>
+ <div class="at-acts"><button class="pb" data-a="pub">⬆ Publish latest</button><button class="pb ghost" data-a="vis">${r.public?'🙈 Unlist':'🌐 List in the Atlas'}</button><button class="pb ghost" data-a="play" data-id="${E(r.id)}">▶ Play my hub</button></div>
+ <p class="mu" style="font-size:12px">💾 Save in the Dungeon Forge publishes automatically${pub?'':' (currently as unlisted)'}. Saving inside your first scene refreshes the sky-view shot.</p></div></div>`}
+function render(){if(!U.isOpen('atlp'))return;const b=body();b.innerHTML=st.view==='detail'&&st.sel?detailView(st.sel):listView();
+ const q=b.querySelector('#at-q');if(q){q.oninput=()=>{clearTimeout(O._qt);O._qt=setTimeout(()=>{st.q=q.value.trim();load(true);setTimeout(()=>{const n=body().querySelector('#at-q');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}},0)},380)};q.onkeydown=e=>e.stopPropagation()}}
+P.addEventListener('click',e=>{const t=e.target.closest('[data-s]');if(t){st.sort=t.dataset.s;st.view='list';load(true);return}
+ const a=e.target.closest('[data-a]');if(a){const k=a.dataset.a,row=st.sel;
+  if(k==='more'){st.page++;load(false)}else if(k==='back'){st.view='list';render()}
+  else if(k==='like'&&row)like(row,!row.liked);else if(k==='play')play(a.dataset.id?(st.mine||row):row);else if(k==='prof'&&row){try{U.profile(row.id)}catch(x){}}
+  else if(k==='pub'){O.publish(true)}else if(k==='vis'&&st.mine){const v=!st.mine.public;setPref(v);NET.send({t:'hubvis',public:v});st.mine.public=v;render();toast(v?'Your hub is listed in the Hub Atlas':'Your hub is unlisted','done')}
+  else if(k==='forge'){O.close();try{BLD.gate()}catch(x){}}return}
+ const c=e.target.closest('.at-card');if(c){const row=st.rows.find(r=>r.id===c.dataset.id);if(row){st.sel=row;st.view='detail';render();body().scrollTop=0;if(WS())NET.send({t:'atlas',op:'get',id:row.id});else api('/atlas/entry/'+encodeURIComponent(row.id)).then(j=>{if(j&&j.row){upd(j.row);render()}}).catch(()=>{})}}});
+/* ---------- like ---------- */
+function like(row,on){if(row.mine)return;
+ if(WS()){NET.send({t:'atlas',op:'like',id:row.id,on});}
+ else{if(!token()){toast('Sign in to <b>Multiplayer</b> once on this browser to like hubs.','bad');return}api('/atlas/like/'+encodeURIComponent(row.id),{body:{on}}).then(j=>{if(j&&j.row){upd(j.row);render()}else toast((j&&j.error)||'Could not like right now','bad')}).catch(()=>toast('The Atlas server can’t be reached','bad'))}
+ row.liked=on;row.likes=Math.max(0,(row.likes|0)+(on?1:-1));upd(row);render();chip();try{sfx(on?880:440,.08,'sine',.04,on?300:-120)}catch(e){}}
+O.like=like;
+/* ---------- play ---------- */
+function play(row){if(!row)return;
+ if(row.mine&&MP()){O.close();try{BLD.gate()}catch(e){try{travel('mine-1')}catch(x){}}return}
+ O.run={id:row.id,row,name:row.name,title:row.title,start:0,done:new Set(),reported:false};
+ if(WS()){O.close();NET.visitHub(row.id);return}
+ toast('Opening <b>'+E(row.title)+'</b>…');
+ api('/atlas/hub/'+encodeURIComponent(row.id)).then(j=>{if(!j||!j.ok||!j.scenes||!j.scenes.length){toast('That hub is not available right now.','bad');return}O.close();loadVisit(j);row.plays=(row.plays|0)+1}).catch(()=>toast('The Atlas server can’t be reached','bad'))}
+O.play=play;
+/* same scene import as a multiplayer visit (net.js · hubdata): prefixed scene ids, portals re-linked, never written to this save (gen) */
+function loadVisit(m){const ids=new Set(m.scenes.map(s=>s.id)),pre='v~'+m.id+'~';let first=null;
+ for(const sc0 of m.scenes){const sc=JSON.parse(JSON.stringify(sc0));sc.visit=m.id;sc.visitOf=sc0.id;sc.visitName=m.name;sc.id=pre+sc0.id;sc.mine=1;sc.gen=1;delete sc.ed;sc.name=(sc.name||'Dungeon')+' · '+m.name;
+  for(const o of sc.objs||[])if(o.d&&o.d.target&&ids.has(o.d.target))o.d.target=pre+o.d.target;
+  DB.scenes[sc.id]=sc;if(!first||sc0.id==='mine-1')first=sc.id}
+ try{if(MODE!=='play')setMode('play')}catch(e){}travel(first);toast('Visiting <b>'+E(m.name)+'</b>’s hub')}
+/* ---------- the visit bar (title · like · objectives · leave) ---------- */
+const bar=document.createElement('div');bar.id='atl-chip';document.body.appendChild(bar);
+function questScenes(vid){return Object.values(DB.scenes).filter(s=>s&&s.visit===vid&&s.quest&&s.quest.steps&&s.quest.steps.length).map(s=>s.id)}
+function chip(){const r=O.run;if(!r||!S||S.visit!==r.id){bar.classList.remove('on');return}const row=r.row||{},q=questScenes(r.id);
+ bar.innerHTML=`<span>🗺 <b>${E(row.title||r.title||'Player hub')}</b> <span class="mu">by ${E(row.name||r.name||S.visitName||'')}</span></span>${q.length?`<span class="mu">🏆 ${r.done.size}/${q.length}</span>`:''}${row.mine?'':`<button class="lk ${row.liked?'on':''}" data-c="like">${row.liked?'♥':'♡'} ${fmt(row.likes)}</button>`}<button data-c="leave">⟵ Hub</button>`;bar.classList.add('on')}
+bar.addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b||!O.run)return;if(b.dataset.c==='like'){const row=O.run.row||{id:O.run.id,likes:0};if(!O.run.row)O.run.row=row;like(row,!row.liked)}else if(b.dataset.c==='leave'){try{travel('hub')}catch(x){}}});
+/* main.js assigns Hooks.onLoad after this module loads, so the scene hook is chained at boot (the same moment net.js chains its own) */
+{const g=PROF.gate;PROF.gate=function(fn){g(function(){const f=Hooks.onLoad;Hooks.onLoad=function(o){f(o);try{onScene()}catch(e){console.error('atlas scene',e)}};fn()})}}
+function onScene(){if(!S)return;if(S.visit){if(!O.run||O.run.id!==S.visit)O.run={id:S.visit,row:null,name:S.visitName,title:'',start:0,done:new Set(),reported:false};if(!O.run.start)O.run.start=performance.now();
+  if(!O.run.row||O.run.row.id!==S.visit){const id=S.visit;if(WS())NET.send({t:'atlas',op:'get',id});else api('/atlas/entry/'+encodeURIComponent(id)).then(j=>{if(j&&j.row&&O.run&&O.run.id===id){O.run.row=j.row;chip()}}).catch(()=>{})}}
+ else if(O.run&&!transition)O.run=null;chip()}
+NET.on_('atlas',m=>{if(m.op==='entry'&&O.run&&m.row&&m.row.id===O.run.id){O.run.row=m.row;chip()}});
+/* ---------- clears: every objective scene of the hub finished in one visit ---------- */
+{const _fc=finishChapter;finishChapter=function(){const r=_fc.apply(this,arguments);try{onClear()}catch(e){console.error('atlas clear',e)}return r}}
+function onClear(){const r=O.run;if(!S||!S.visit||!r||r.id!==S.visit)return;r.done.add(S.id);chip();const need=questScenes(r.id);if(!need.length||!need.every(id=>r.done.has(id))||r.reported)return;r.reported=true;
+ const sec=Math.round((performance.now()-(r.start||performance.now()))/1000),title=(r.row&&r.row.title)||'this hub';
+ if(WS())NET.send({t:'atlas',op:'done',id:r.id,sec});else api('/atlas/done/'+encodeURIComponent(r.id),{body:{sec,name:'Campaign · '+KN(Hero.key)}}).then(j=>{if(j&&j.row){r.row=j.row;chip()}}).catch(()=>{});
+ setTimeout(()=>toast(`🏆 <b>Hub cleared!</b> ${E(title)} in ${mmss(sec)} — your clear counts in the Hub Atlas.${r.row&&!r.row.mine&&!r.row.liked?' Enjoyed it? Tap ♡ in the bar above.':''}`,'done'),2600)}
+/* ===================================================================== publishing (Multiplayer) ===================================================================== */
+const pubPref=()=>ls('nca_atlas_pub')!=='0';const setPref=v=>ls('nca_atlas_pub',v?'1':'0');
+O.pubPref=pubPref;
+let shotData=null,shotDirty=false;try{shotData=ls('nca_atlas_shot')||null}catch(e){}
+O.shot=()=>shotDirty?shotData:null;     /* only a NEW shot is uploaded; the server keeps the last one */
+if(typeof NET!=='undefined'){const _p=NET.publishHub;NET.publishHub=function(pub,cb){if(pub===true||pub===false)setPref(pub);return _p.call(this,pub,cb)};
+ NET.on_('hubpub',m=>{if(m.entry){shotDirty=shotDirty&&!m.entry.shot;if(!m.entry.shot&&shotData)shotDirty=true;st.mine=m.entry;if(U.isOpen('atlp'))render()}else if(m.vis&&st.mine){st.mine.public=m.public;if(U.isOpen('atlp'))render()}})}
+/* sky view: the current scene from high above, rendered through the game's own post-processing (same look as play) into the
+   main canvas, copied out in the same task and immediately replaced by the normal view again — nothing flashes on screen */
+O.capture=function(){if(!S||!RT||!RT.root||typeof R==='undefined'||typeof post==='undefined')return null;const W=640,H=400,hid=[];const sky0=skyMesh.position.clone();
+ try{const hide=o=>{if(o&&o.visible){o.visible=false;hid.push(o)}};try{hide(Edit.ghost)}catch(e){}try{hide(selBox)}catch(e){}try{hide(brushRing)}catch(e){}try{hide(heroG)}catch(e){}
+  const cw=cv.width,ch=cv.height,size=Math.max(S.w||60,S.d||60),cy=(RT.terr&&RT.terr.H)?RT.terr.H(0,0):0,cam=new THREE.PerspectiveCamera(36,cw/ch,1,size*8);
+  const ar=cw/ch,k=ar<1.6?1.6/ar:1;cam.position.set(size*.04,cy+size*.74*k,size*.56*k);cam.lookAt(0,cy,size*.02);cam.updateMatrixWorld();skyMesh.position.copy(cam.position);
+  const pc=post.cfg||{},keep={grain:pc.grain,ca:pc.ca,vig:pc.vig};try{pc.grain=0;pc.ca=0;pc.vig=Math.min(.6,pc.vig||0)}catch(e){}
+  try{post.render(SC,cam,TIME,CTX.exposure*1.55)}finally{Object.assign(pc,keep)}
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
+  let sw=cw,sh=cw/1.6,sx=0,sy=(ch-sh)/2;if(cw/ch>1.6){sh=ch;sw=ch*1.6;sx=(cw-sw)/2;sy=0}x.drawImage(cv,sx,sy,sw,sh,0,0,W,H);
+  return c.toDataURL('image/jpeg',.84)}catch(e){console.warn('atlas capture',e);return null}
+ finally{for(const o of hid)o.visible=true;skyMesh.position.copy(sky0);try{post.render(SC,CAM,TIME,CTX.exposure)}catch(e){}}};
+O.publish=function(force){if(!MP())return;try{if(S&&BLD.mine(S)&&(S.id===BLD.baseId||!shotData||force)){const d=O.capture();if(d){shotData=d;shotDirty=true;ls('nca_atlas_shot',d)}}}catch(e){}
+ if(!NET.authed){toast('Saved on this device — connect to the server to publish it to the <b>Hub Atlas</b>.','bad');return}
+ const pub=pubPref();NET.publishHub(pub,()=>toast(pub?'🗺 Saved · your hub is <b>live in the Hub Atlas</b>':'Saved on the server · unlisted (Hub Atlas → My hub to list it)','done'))};
+if(typeof BLD!=='undefined'){const _s=BLD.save;BLD.save=function(){const was=!!(S&&BLD.mine(S));const r=_s.apply(this,arguments);if(was)setTimeout(()=>O.publish(false),60);return r};const b=document.getElementById('b-save');if(b)b.onclick=BLD.save}
+return O})();
 </script>
 <script>
 /* ============ MAIN · boot, mode switching, render loop ============ */

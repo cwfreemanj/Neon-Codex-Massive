@@ -196,13 +196,35 @@ Server → client: `welcome`, `room`, `join`, `leave`, `snap`, `appear`, `chat`,
 ## Renamed: Neon Codex Massive
 The game is now **Neon Codex Massive** (browser tab title, loading screen, top-left logo, main menu, server banner/README/package description). Internal identifiers are unchanged so nothing breaks: save keys (`nca_*`), the `nca_server` folder/zip name, the `neon-codex-server` package name, the `/health` `game: 'neon-codex'` field and the Railway URL. In-story mentions of "the Neon Codex" (the book the chapters are about) are lore and stay.
 
-## Update: full mobile support (phones & tablets)
-The game file now detects touch devices and switches to a mobile layout. Desktop is unchanged: on a mouse/keyboard computer none of the mobile code runs.
-- **Detection & landscape**: phones/tablets are detected automatically (`?mobile=1` forces the touch version, `?mobile=0` the desktop version, `?mobile=auto` resets; the choice is remembered on that device). Portrait shows a "rotate your device" screen. The first tap enters full screen (Android, iPad) and locks landscape. iPhone Safari has no full-screen API for web pages, so players use Share → Add to Home Screen.
-- **Layout**: the desktop interface is laid out on a virtual screen ≥540 px tall and scaled to the phone, so every menu, panel and dialog keeps its desktop layout. In windowed mode this uses the viewport meta tag; in full screen (where Chrome ignores it) it uses CSS zoom, and the page sees one consistent virtual coordinate space. Phones start on the "medium" graphics preset with a capped pixel ratio (auto-quality still adapts).
-- **Play controls**: floating move stick on the left half (drag past the ring or tap 🏃 to sprint), drag the right half to look, pinch to zoom. The real hotbar becomes a thumb cluster: ATTACK (tap / hold for combos or bow draw, drag it to aim), abilities 1-4 on an arc, extra abilities in a bottom row, ROLL, BLOCK (hold), JUMP. Cooldowns, mana and icons stay live. The interact prompt is a big TAP button. ⏸ pauses; ☰ opens every keyboard-only function (champion, chapters, journal, attributes, codex, build, studio, camera, free aim, sound, chat/social/profile in multiplayer) plus touch settings (button size, look speed, left/right-handed, invert, vibration).
-- **Build mode**: 1 finger selects/drags/paints, drag-then-lift to place, 1 finger on empty ground orbits, 2 fingers pan + pinch-zoom; an action bar rotates/scales/raises/lowers/focuses/copies/deletes; side panels collapse with edge tabs.
-- **Design Studio**: 1 finger orbits / moves parts, 2 fingers pan + pinch-zoom.
-- **Text**: the tutorial, journal controls list, dialogue footer and studio hints describe touch controls on mobile; the tutorial's steps and goals are unchanged.
-- **Integrity**: touch controls drive the same code paths as keyboard/mouse (synthetic key/mouse events and the camera variables mouse-look writes), so combat, abilities, cooldowns, tutorial tracking, multiplayer and saves are untouched. No server change.
-- **Wix embed**: for full screen inside the Wix iframe, the iframe needs `allow="fullscreen"`.
+## Update: Hub Atlas + account persistence
+### Hub Atlas (Campaign + Multiplayer)
+A domed observatory on the south lawn of the central hub (added to existing saves automatically). Interact with it to open the Atlas:
+every **public player hub saved on the server**, each with a **sky-view preview shot**, the builder (champion, level, guild tag, online dot),
+**monster portraits** with counts (bosses highlighted), the **objectives** of every scene, **plays**, **likes**, **full clears**, clear rate,
+**best and average clear time**, **players exploring it right now**, danger rating, scene/object counts and update / first-published dates.
+Tabs: Featured · Most liked · Most played · Most cleared · Newest · My hub, plus search. **▶ Play** loads the hub right from the menu;
+**♥ Like** is one per account; a **clear** = every objective scene of the hub finished in one visit. While visiting, a bar shows the hub,
+objective progress, a Like button and ⟵ Hub.
+* **Publishing:** in Multiplayer, **💾 Save** in the Dungeon Forge uploads the hub and (when saved inside the first scene) a fresh sky-view
+  shot. Atlas → *My hub* shows its stats and can unlist / relist it. Campaign browses and plays over HTTP (likes use the multiplayer login
+  of that browser, if any).
+* **Counting rules (server-side):** a play counts once per player (or per IP in campaign) per hub per 20 min, owners never count;
+  a clear counts once per player per hub per 6 h; monsters / objectives are computed from the scenes on the server, never trusted from clients.
+* **Protocol:** `hubpub` gains `shot` (JPEG data URL ≤ 400 KB) and replies with the Atlas `entry`; `hubvis {public}` lists/unlists;
+  `atlas {op:'list'|'get'|'mine'|'like'|'done'}`. HTTP: `GET /atlas?sort=&q=&page=`, `GET /atlas/entry/<id>`, `GET /atlas/hub/<id>`,
+  `GET /atlas/shot/<id>.jpg`, `POST /atlas/like/<id>` (header `x-token`), `POST /atlas/done/<id>`.
+
+### Accounts that survive (what changed and what YOU must check)
+* **Railway volume (most important).** Without a volume, Railway wipes the server's disk on every deploy/restart, so every account,
+  cloud save, guild and hub is gone. The server now uses `RAILWAY_VOLUME_MOUNT_PATH` automatically when a volume is attached, prints a
+  loud warning in the deploy logs when it isn't, and `/health` reports `"persistent": true/false`. Attach a volume at `/data`
+  (Service → Settings → Volumes) and redeploy; `/health` should then show `"persistent":true,"volume":true`.
+* **Passwords.** Players can set a password (Social → Account → 🔒 Set password, or when creating a name). On any new device or browser
+  they enter name + password and their account and cloud save (levels, prestige, champions, codex, dungeon) come back. Each device gets its
+  own login token, so signing in on a phone no longer logs the desktop out. Wrong passwords are throttled.
+* **Saves are never dropped.** Before, a cloud save arriving within 3 s of the previous one was silently discarded (often the one sent when
+  closing the tab). Now bursts are coalesced (newest wins), anything pending is written when the connection closes, and the client re-sends a
+  save the server never acknowledged.
+* **Storage layout.** `players.json` holds accounts only; big data lives in `saves/<id>.json` (+ `<id>.prev.json` rollback copy),
+  `hubs/<id>.json` and `hubs/<id>.jpg`. Old data files are migrated automatically on first start. Hourly snapshots of accounts, guilds and
+  orders go to `backups/` (last 72 kept).
