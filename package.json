@@ -1,0 +1,9 @@
+{
+  "name": "neon-codex-server",
+  "version": "1.0.0",
+  "description": "Multiplayer backend for Neon Codex Massive (WebSocket hub rooms, chat, parties, guilds, leaderboards, quests, Wix star purchases)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test/smoke.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
