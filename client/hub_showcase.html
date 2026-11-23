@@ -1,5 +1,73 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#05081a"><meta name="format-detection" content="telephone=no">
+<!-- ===== MOBILE BOOT · runs before anything else =====
+     Decides whether this is a touch device and, if so, scales the page so the full desktop interface fits a phone in landscape.
+     ?mobile=1 forces the touch version on any device, ?mobile=0 forces the desktop version (both are remembered on that device; ?mobile=auto forgets). -->
+<script id="nca-mobile-boot">(function(){
+var W=window,D=document,ls=null;try{ls=W.localStorage}catch(e){}
+var force=null,m=/[?&]mobile=(0|1|auto)\b/.exec(location.search);
+try{if(m){if(m[1]==='auto')ls.removeItem('ncam_force');else{ls.setItem('ncam_force',m[1]);force=m[1]==='1'}}else{var v=ls.getItem('ncam_force');if(v==='0'||v==='1')force=v==='1'}}catch(e){}
+var ua=navigator.userAgent||'',tp=navigator.maxTouchPoints||0,mq=function(q){try{return W.matchMedia(q).matches}catch(e){return false}};
+var auto=/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|PlayBook|BlackBerry|IEMobile|Opera Mini/i.test(ua)||(/Macintosh/.test(ua)&&tp>1)||(tp>0&&mq('(pointer:coarse)')&&!mq('(hover:hover)'));
+var on=force===null?auto:force;W.NCA_MOBILE=on;if(!on)return;
+var de=D.documentElement;de.classList.add('mob');
+/* ---- layout: the desktop interface is laid out on a virtual screen at least TH css px tall, then scaled to the real screen ---- */
+var TH=540,REAL=W.devicePixelRatio||1,meta=null,last='';W.NCA_MSCALE=1;
+function land(){try{if(screen.orientation&&screen.orientation.type)return screen.orientation.type.indexOf('landscape')===0}catch(e){}if(typeof W.orientation==='number')return Math.abs(W.orientation)===90;return W.innerWidth>W.innerHeight}
+function fit(){var sw=screen.width||W.innerWidth,sh=screen.height||W.innerHeight,S=Math.min(sw,sh),L=Math.max(sw,sh),ls_=land(),s=Math.min(1,S/TH),c;
+ s=Math.round(s*1000)/1000;W.NCA_MSCALE=s;de.style.setProperty('--mu',(1/s).toFixed(4));de.classList.toggle('portrait',!ls_);
+ c=s>=1?'width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover':'width='+Math.round((ls_?L:S)/s)+',initial-scale='+s+',minimum-scale='+s+',maximum-scale='+s+',user-scalable=no,viewport-fit=cover';
+ if(c===last)return;last=c;if(!meta)meta=D.querySelector('meta[name=viewport]');if(!meta){meta=D.createElement('meta');meta.name='viewport';D.head.appendChild(meta)}meta.setAttribute('content',c)}
+/* ---- full screen: browsers (Chrome/Android) drop the viewport scale while a page is full screen, so there the same virtual
+   screen is produced with CSS zoom on <html>. To keep every coordinate the game reads consistent, the page then sees one
+   virtual space: innerWidth/innerHeight, pointer/touch clientX/Y and getBoundingClientRect are all divided by the zoom.
+   Viewport units (vw/vh) and media-query widths are corrected the same way. Outside that one situation Z=1 and nothing changes. */
+var Z=1;W.NCA_ZOOM=1;
+function own(o,p){for(var q=o;q;q=Object.getPrototypeOf(q)){var d=Object.getOwnPropertyDescriptor(q,p);if(d)return{o:q,d:d}}return null}
+function wrapGet(o,p,f){var r=own(o,p);if(!r||!r.d.get)return null;try{Object.defineProperty(r.o,p,{configurable:true,enumerable:r.d.enumerable,get:function(){var v=r.d.get.call(this);return Z===1?v:f(v)},set:r.d.set})}catch(e){}return r.d.get}
+var rawIW=wrapGet(W,'innerWidth',function(v){return Math.round(v/Z)}),rawIH=wrapGet(W,'innerHeight',function(v){return Math.round(v/Z)});
+var dz=function(v){return v/Z};
+['clientX','clientY','pageX','pageY','x','y'].forEach(function(p){if(W.MouseEvent)wrapGet(MouseEvent.prototype,p,dz)});
+['clientX','clientY','pageX','pageY'].forEach(function(p){if(W.Touch)wrapGet(Touch.prototype,p,dz)});
+try{var gb=Element.prototype.getBoundingClientRect;Element.prototype.getBoundingClientRect=function(){var r=gb.call(this);return Z===1?r:new DOMRect(r.x/Z,r.y/Z,r.width/Z,r.height/Z)}}catch(e){}
+try{var efp=Document.prototype.elementFromPoint;Document.prototype.elementFromPoint=function(x,y){return efp.call(this,x*Z,y*Z)}}catch(e){}
+/* stylesheets: vw/vh become calc(… * var(--vk,1)) once (identical while --vk is 1); @media px limits are scaled while zoomed */
+var VW=/([^\w.#-])(\d*\.?\d+)(vw|vh)\b/g;
+function mqz(t){return t.replace(/@media[^{]+/g,function(q){return q.replace(/(\d+(?:\.\d+)?)px/g,function(m,n){return(n*Z).toFixed(1)+'px'})})}
+function fixStyle(el){if(!el||el.id==='nca-mobile-boot-css')return;var t=el.textContent||'';
+ if(el._mobW!==t){VW.lastIndex=0;el._mobO=t.replace(VW,function(m,a,n,u){return a+'calc('+n+u+' * var(--vk,1))'});el._mobZ=null}
+ if(el._mobZ!==Z){el._mobZ=Z;var out=Z===1?el._mobO:mqz(el._mobO);el._mobW=out;if(out!==t)el.textContent=out}}
+function fixAll(){var s=D.getElementsByTagName('style');for(var i=0;i<s.length;i++)fixStyle(s[i])}
+try{new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var a=ms[i].addedNodes;for(var j=0;j<a.length;j++){var n=a[j];if(n.nodeName==='STYLE')fixStyle(n);else if(n.nodeType===3&&n.parentNode&&n.parentNode.nodeName==='STYLE')fixStyle(n.parentNode)}}}).observe(de,{childList:true,subtree:true})}catch(e){}
+function zmode(){var fs=!!(D.fullscreenElement||D.webkitFullscreenElement),s=W.NCA_MSCALE,z=1;
+ if(fs&&s<1&&rawIW){var L=land()?Math.max(screen.width,screen.height):Math.min(screen.width,screen.height);if(rawIW.call(W)<L/s*.9)z=s}
+ if(z===Z)return;Z=z;W.NCA_ZOOM=z;de.style.zoom=z===1?'':String(z);de.style.setProperty('--vk',z===1?'1':(1/z).toFixed(4));de.classList.toggle('mobz',z!==1);fixAll();
+ setTimeout(function(){try{W.dispatchEvent(new Event('resize'))}catch(e){}},30)}
+D.addEventListener('fullscreenchange',function(){zmode();setTimeout(zmode,250)});D.addEventListener('webkitfullscreenchange',function(){zmode();setTimeout(zmode,250)});
+fit();var ft=0,refit=function(){clearTimeout(ft);ft=setTimeout(function(){fit();zmode()},120)};W.addEventListener('orientationchange',function(){fit();refit()});W.addEventListener('resize',refit);try{screen.orientation&&screen.orientation.addEventListener('change',refit)}catch(e){}
+/* ---- render resolution: phones get a sharp but affordable pixel ratio (the quality governor still adapts on top of this) ---- */
+try{Object.defineProperty(W,'devicePixelRatio',{configurable:true,get:function(){return Math.max(1,Math.min(1.5,REAL*W.NCA_MSCALE))}})}catch(e){}
+/* ---- first run on a phone: start from the "medium" graphics preset (MSAA off) instead of ultra; the player can change it in Settings ---- */
+try{if(!ls.getItem('nca_settings_v1'))ls.setItem('nca_settings_v1',JSON.stringify({q:{res:1,ms:0,shadow:1024,vd:170,cap:0,auto:true,target:30,fps:false}}))}catch(e){}
+/* ---- no pinch-zoom / double-tap zoom / long-press menus (iOS ignores user-scalable=no) ---- */
+D.addEventListener('gesturestart',function(e){e.preventDefault()},{passive:false});
+D.addEventListener('dblclick',function(e){if(!/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||''))e.preventDefault()},{passive:false});
+D.addEventListener('contextmenu',function(e){if(!/INPUT|TEXTAREA/.test((e.target||{}).tagName||''))e.preventDefault()});
+})();</script>
+<style id="nca-mobile-boot-css">
+html.mob,html.mob body{overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+html.mob body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:pan-x pan-y}
+html.mob input,html.mob textarea,html.mob [contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+html.mob #c{touch-action:none}
+#mob-rot{display:none}
+html.mob.portrait #mob-rot{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:30px;text-align:center;background:radial-gradient(90% 70% at 50% 30%,#2a1a5e,#05071a 70%);color:#e8ecff;font:600 20px/1.4 Rajdhani,system-ui,sans-serif;letter-spacing:.04em;touch-action:none}
+#mob-rot .ph{width:70px;height:120px;border:4px solid #39e8ff;border-radius:14px;box-shadow:0 0 24px rgba(57,232,255,.5);animation:mobrot 2.2s ease-in-out infinite}
+#mob-rot b{display:block;font:700 26px Cinzel,serif;letter-spacing:.14em;color:#ffc94a}
+#mob-rot small{color:#9aa6d8;font-size:15px}
+@keyframes mobrot{0%,25%{transform:rotate(0)}55%,100%{transform:rotate(-90deg)}}
+</style>
+
 <!-- ===== SERVER SETTINGS — the only lines you need to edit before publishing =====
      server  : your Railway websocket address, e.g. "wss://neon-codex-production.up.railway.app"   (leave "" to play Multiplayer offline)
      shopUrl : (optional) a Wix page that sells star packs, used when the game is NOT embedded in Wix
@@ -264,6 +332,7 @@ body.talking #party,body.chopen #party{opacity:.3}
 .st-foot{margin-top:10px;font-size:11.5px;color:var(--mu);line-height:1.5;text-align:center}.st-foot kbd{background:rgba(255,255,255,.1);border-radius:4px;padding:0 5px}
 @media(max-width:1060px){.st-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.st-main{grid-template-columns:1fr}.st-grid{grid-template-columns:1fr}.st-pic{height:110px}}
 </style></head><body class="play">
+<div id="mob-rot"><div class="ph"></div><b>ROTATE YOUR DEVICE</b>Neon Codex Massive plays in landscape.<small>Turn your phone sideways to continue.</small></div>
 <canvas id="c" tabindex="0"></canvas>
 <div id="top"><div id="logo">NEON CODEX MASSIVE<small>HUB STUDIO</small></div>
  <div class="seg" id="modebtns"><button data-mode="play" class="on">▶ PLAY</button><button data-mode="build">✎ BUILD</button></div>
@@ -7568,5 +7637,414 @@ PROF.gate(function boot(){try{loadLib()}catch(e){}loadProg();try{UNL.migrate()}c
  $('hint').style.opacity=1;setTimeout(()=>{$('hint').style.opacity=0},16000);requestAnimationFrame(frame)});
 window.__studio={DB,RT,get S(){return S},P,Edit,TB,PROG,setMode,loadScene,openScene,travel,K,CY,EC,get ENEM(){return ENEM},get MODE(){return MODE},select,setBrush,createScene,startAttack,useAbility,setHeroKey,KITS,Hero,evalQuest,get PS(){return PS},hurtEnemy,killEnemy,hurtAnchor,get ANCH(){return ANCH},get OB(){return OB},openJournal,finishChapter,get bossE(){return bossE}};
 
+</script>
+<style id="nca-mobile-css">
+/* ============ MOB · phone / tablet layout (only active under html.mob) ============
+   --u = one physical screen pixel in layout px, so touch targets keep a real-world size on every phone */
+html.mob{--u:calc(var(--mu,1) * 1px)}
+#mob-ui,#mob-menu,#mob-bbar,#mob-ltog,#mob-rtog,#mob-mbtn,#mob-pbtn,#mob-tbw{display:none}
+html.mob #mob-mbtn,html.mob #mob-pbtn{display:inline-flex}
+html.mob #mob-tbw{display:flex;gap:6px;position:sticky;right:0;margin-left:auto;padding-left:8px;background:linear-gradient(90deg,transparent,rgba(5,8,20,.95) 14px);align-self:stretch;align-items:center}
+html.mob body.build #mob-pbtn{display:none}
+html.mob body.build #logo{display:none}
+html.mob #mghint,html.mob #fpsov:empty{display:none!important}
+
+/* ---------- top bar: compact, nothing hidden that matters ---------- */
+html.mob #top{gap:6px;padding:0 8px;padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+html.mob #top::-webkit-scrollbar{display:none}
+html.mob #top>*{flex-shrink:0}
+html.mob #logo small{display:none}
+html.mob #logo{font-size:13px;line-height:1.05;max-width:118px;white-space:normal}
+html.mob body.play #sname,html.mob body.play #addscn{display:none}
+html.mob #top .ib2,html.mob #top button{min-height:38px;padding:6px 11px;font-size:13.5px}
+html.mob #top .ib2 i{font-style:normal}
+html.mob #mob-mbtn,html.mob #mob-pbtn{align-items:center;justify-content:center;min-width:46px;font-size:19px!important;font-weight:700;border-color:var(--go)!important;color:#fff}
+@media (max-width:1100px){html.mob #top .ib2 .tl{display:none}html.mob #top .ib2{padding:6px 10px;font-size:17px}}
+
+/* ---------- main menu: scrolls instead of being cut off ---------- */
+html.mob #mainm{justify-content:flex-start;gap:16px;padding:16px max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left));-webkit-overflow-scrolling:touch}
+html.mob #mainm>.mm-t{margin-top:auto}html.mob #mainm>.mm-v{margin-bottom:auto}
+html.mob .mm-t h1{font-size:44px}
+html.mob .mm-card{padding:18px 20px 16px;gap:8px}
+html.mob .mm-card .pb{padding:14px 14px;font-size:17px}
+html.mob .mm-card .lnk{font-size:13px;padding:6px 0}
+
+/* ---------- HUD placement ---------- */
+html.mob #hint{display:none}
+html.mob #hpbar{left:max(16px,env(safe-area-inset-left))}
+html.mob #tracker{left:max(16px,env(safe-area-inset-left));right:auto;top:176px;width:270px;padding:10px 12px 8px;transform:scale(.8);transform-origin:top left;max-height:230px;overflow:hidden}
+html.mob #miniw{right:max(10px,env(safe-area-inset-right));bottom:auto;top:58px;width:96px;height:96px;padding:3px}
+html.mob #miniw canvas{width:100%!important;height:100%!important}
+html.mob #minin{font-size:10px}
+html.mob #boss{width:min(560px,52vw)}
+html.mob #ret{top:50%}
+
+/* ---------- the action cluster (the game's own hotbar slots) ---------- */
+html.mob #abil{position:fixed;left:0;top:0;right:auto;bottom:auto;width:0;height:0;transform:none;display:block;max-width:none;z-index:12;pointer-events:none}
+html.mob #abil .ab{position:absolute;padding:calc(var(--u)*2.5);clip-path:circle(50%);border-radius:50%;pointer-events:auto;touch-action:none;transition:transform .06s,filter .1s;-webkit-user-select:none;user-select:none}
+html.mob #abil .ab *{pointer-events:none}
+html.mob #abil .ab>div{clip-path:circle(50%);border-radius:50%}
+html.mob #abil .ab kbd{display:none}
+html.mob #abil .ab b{font-size:calc(var(--u)*25)}
+html.mob #abil .ab em{left:0;right:0;top:auto;bottom:16%;text-align:center;font-size:calc(var(--u)*8.5);line-height:1.05;max-height:2.2em;padding:0 14%}
+html.mob #abil .ab .cdt{padding-top:0;font-size:calc(var(--u)*20)}
+html.mob #abil .ab[data-k=atk] b{font-size:calc(var(--u)*40)}
+html.mob #abil .ab[data-k=atk] em{font-size:calc(var(--u)*11);bottom:13%}
+html.mob #abil .ab[data-k=atk]{background:linear-gradient(145deg,#ffe08a,rgba(255,201,74,.25) 50%,#ffc94a)}
+html.mob #abil .ab[data-mobj] b{font-size:calc(var(--u)*28)}
+html.mob #abil .ab.mob-dn{transform:scale(.9);filter:brightness(1.45)}
+html.mob #hud:not(.on) #abil{display:none}
+html.mob body:not(.mob-play) #abil{opacity:.35}
+html.mob body:not(.mob-play) #abil .ab{pointer-events:none}
+
+/* ---------- interact prompt = big tap button ---------- */
+html.mob #prompt{left:41%;bottom:calc(var(--u)*118);padding:calc(var(--u)*7) calc(var(--u)*14);font-size:calc(var(--u)*13.5);line-height:1.25;border-radius:calc(var(--u)*14);pointer-events:auto;touch-action:none;max-width:34vw;white-space:normal;text-align:center;border-width:2px}
+html.mob #prompt *{pointer-events:none}
+html.mob #prompt kbd{font-size:0!important;padding:calc(var(--u)*3) calc(var(--u)*8);border-radius:calc(var(--u)*6);vertical-align:middle}
+html.mob #prompt kbd::before{content:'TAP';font:800 calc(var(--u)*12) var(--f);letter-spacing:.06em}
+html.mob #prompt.lock kbd::before{content:'🔒'}
+html.mob #prompt.on:not(.lock){animation:mobpr 1.6s ease-in-out infinite}
+html.mob #prompt.mob-dn{filter:brightness(1.5);transform:translateX(-50%) scale(.95)}
+@keyframes mobpr{50%{box-shadow:0 0 34px rgba(57,232,255,.65)}}
+
+/* ---------- touch layer: stick, hints, sprint lock ---------- */
+html.mob body.mob-play #mob-ui{display:block}
+#mob-ui{position:fixed;inset:0;z-index:11;pointer-events:none}
+#mob-stk{position:absolute;left:0;top:0;width:calc(var(--u)*116);height:calc(var(--u)*116);margin:calc(var(--u)*-58) 0 0 calc(var(--u)*-58);border-radius:50%;border:calc(var(--u)*2) solid rgba(160,235,255,.55);background:radial-gradient(circle,rgba(57,232,255,.10),rgba(8,14,40,.35) 70%);box-shadow:0 0 calc(var(--u)*18) rgba(57,232,255,.25),inset 0 0 calc(var(--u)*16) rgba(57,232,255,.15);display:none;transform:scale(var(--ms,1))}
+#mob-stk.on{display:block}
+#mob-stk.spr{border-color:#ffc94a;box-shadow:0 0 calc(var(--u)*26) rgba(255,201,74,.55)}
+#mob-knb{position:absolute;left:50%;top:50%;width:calc(var(--u)*50);height:calc(var(--u)*50);margin:calc(var(--u)*-25) 0 0 calc(var(--u)*-25);border-radius:50%;background:radial-gradient(circle at 40% 35%,#eafcff,#5fdcff 45%,#1b5f90);box-shadow:0 0 calc(var(--u)*14) rgba(57,232,255,.7)}
+#mob-stk.spr #mob-knb{background:radial-gradient(circle at 40% 35%,#fff7da,#ffc94a 45%,#8a5a10);box-shadow:0 0 calc(var(--u)*16) rgba(255,201,74,.8)}
+#mob-stkh{position:absolute;width:calc(var(--u)*96);height:calc(var(--u)*96);margin:calc(var(--u)*-48) 0 0 calc(var(--u)*-48);border-radius:50%;border:calc(var(--u)*2) dashed rgba(160,235,255,.28);display:grid;place-items:center;transition:opacity .3s}
+#mob-stkh i{width:calc(var(--u)*34);height:calc(var(--u)*34);border-radius:50%;background:rgba(95,220,255,.18);border:1px solid rgba(160,235,255,.35)}
+#mob-stkh span{position:absolute;bottom:calc(var(--u)*-20);font:700 calc(var(--u)*10) var(--f);letter-spacing:.2em;color:rgba(200,240,255,.55)}
+#mob-stkh.off{opacity:0}
+#mob-spr{position:absolute;width:calc(var(--u)*44);height:calc(var(--u)*44);border-radius:50%;border:calc(var(--u)*1.5) solid rgba(160,235,255,.45);background:rgba(8,14,40,.55);font-size:calc(var(--u)*20);line-height:1;pointer-events:auto;touch-action:none;color:#fff;padding:0;display:grid;place-items:center}
+#mob-spr.on{border-color:#ffc94a;background:rgba(255,201,74,.3);box-shadow:0 0 calc(var(--u)*14) rgba(255,201,74,.6)}
+#mob-lookh{position:absolute;left:58%;top:32%;font:700 calc(var(--u)*11) var(--f);letter-spacing:.22em;color:rgba(200,240,255,.45);transition:opacity .6s}
+#mob-lookh.off{opacity:0}
+#mob-tblk{position:absolute;display:none;border-radius:50%;border:calc(var(--u)*2.5) solid #bfe0ff;background:radial-gradient(circle at 50% 30%,rgba(40,60,120,.95),rgba(6,10,26,.95));color:#bfe0ff;font-size:calc(var(--u)*24);pointer-events:auto;touch-action:none;padding:0;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 calc(var(--u)*14) rgba(150,200,255,.5)}
+#mob-tblk em{font:700 calc(var(--u)*8.5) var(--f);font-style:normal;color:#e4eaff}
+#mob-tblk.on{display:flex}#mob-tblk.mob-dn{filter:brightness(1.5)}
+
+/* ---------- quick menu ---------- */
+#mob-menu{position:fixed;inset:0;z-index:96;background:rgba(3,5,16,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
+html.mob #mob-menu.on{display:flex}
+#mob-menu .mm-box{width:min(96vw,calc(var(--u)*760));max-height:94vh;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:linear-gradient(180deg,rgba(20,26,62,.97),rgba(8,11,28,.98));border:1px solid rgba(255,201,74,.45);border-radius:calc(var(--u)*16);padding:calc(var(--u)*12) calc(var(--u)*14) calc(var(--u)*14);box-shadow:0 0 40px rgba(57,232,255,.15);font-family:var(--f);color:var(--tx)}
+#mob-menu .mm-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:calc(var(--u)*8)}
+#mob-menu .mm-h b{font:700 calc(var(--u)*16) var(--fs);letter-spacing:.3em;color:var(--go)}
+#mob-menu .mm-x{width:calc(var(--u)*42);height:calc(var(--u)*42);border-radius:50%;font-size:calc(var(--u)*18);padding:0;border:1px solid var(--ln);background:rgba(255,255,255,.06);color:#fff}
+#mob-menu .mm-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--u)*142),1fr));gap:calc(var(--u)*8)}
+#mob-menu .mm-g button{display:flex;align-items:center;gap:calc(var(--u)*8);min-height:calc(var(--u)*50);padding:calc(var(--u)*6) calc(var(--u)*10);border-radius:calc(var(--u)*11);border:1px solid rgba(120,160,255,.28);background:linear-gradient(180deg,rgba(40,52,110,.7),rgba(14,18,44,.8));color:#eef2ff;font:600 calc(var(--u)*13) var(--f);text-align:left;line-height:1.15}
+#mob-menu .mm-g button span{font-size:calc(var(--u)*20);width:calc(var(--u)*26);text-align:center;flex:none}
+#mob-menu .mm-g button:active{border-color:var(--go);background:rgba(255,201,74,.2)}
+#mob-menu .mm-s{margin-top:calc(var(--u)*12);border-top:1px solid var(--ln);padding-top:calc(var(--u)*8)}
+#mob-menu .mm-s h4{margin:0 0 calc(var(--u)*6);font:700 calc(var(--u)*11) var(--f);letter-spacing:.25em;color:var(--mu)}
+#mob-menu .mm-s label{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(var(--u)*4) 0;font:600 calc(var(--u)*13) var(--f)}
+#mob-menu .mm-s label span{display:flex;gap:calc(var(--u)*5)}
+#mob-menu .mm-s label button{min-width:calc(var(--u)*52);min-height:calc(var(--u)*36);padding:0 calc(var(--u)*10);border-radius:calc(var(--u)*9);border:1px solid var(--ln);background:rgba(255,255,255,.05);color:#dfe6ff;font:700 calc(var(--u)*12) var(--f)}
+#mob-menu .mm-s label button.on{border-color:var(--go);background:rgba(255,201,74,.22);color:#fff}
+#mob-menu .mm-n{margin:calc(var(--u)*6) 0 0;font-size:calc(var(--u)*11.5);color:var(--mu);line-height:1.4}
+
+/* ---------- build mode ---------- */
+html.mob body.build .panel{top:56px;bottom:68px;transition:transform .22s ease}
+html.mob body.build #left{width:236px;left:max(6px,env(safe-area-inset-left))}
+html.mob body.build #right{width:250px;right:max(6px,env(safe-area-inset-right));max-height:none;bottom:68px}
+html.mob body.build.mob-lc #left{transform:translateX(calc(-100% - 20px))}
+html.mob body.build.mob-rc #right{transform:translateX(calc(100% + 20px))}
+html.mob body.build #mob-ltog,html.mob body.build #mob-rtog{display:grid;place-items:center;position:fixed;top:50%;z-index:22;width:calc(var(--u)*34);height:calc(var(--u)*64);margin-top:calc(var(--u)*-32);padding:0;border:1px solid var(--go);background:rgba(10,14,36,.9);color:var(--go);font-size:calc(var(--u)*18);transition:left .22s,right .22s}
+html.mob body.build #mob-ltog{left:248px;border-radius:0 12px 12px 0}html.mob body.build.mob-lc #mob-ltog{left:0}
+html.mob body.build #mob-rtog{right:262px;border-radius:12px 0 0 12px}html.mob body.build.mob-rc #mob-rtog{right:0}
+html.mob #tools{padding:6px;gap:5px;max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none}
+html.mob #tools button{min-height:calc(var(--u)*40);padding:0 calc(var(--u)*11);font-size:calc(var(--u)*12.5)}
+html.mob #toolhint{display:none}
+#mob-bbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--u)*62 + 10px);z-index:22;gap:calc(var(--u)*5);padding:calc(var(--u)*5);background:var(--pn,rgba(10,14,36,.9));border:1px solid var(--ln);border-radius:calc(var(--u)*14);backdrop-filter:blur(10px)}
+html.mob body.build #mob-bbar.on{display:flex}
+#mob-bbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;width:calc(var(--u)*50);height:calc(var(--u)*50);padding:0;border-radius:calc(var(--u)*10);border:1px solid var(--ln);background:rgba(255,255,255,.05);color:#fff}
+#mob-bbar button:active{border-color:var(--go);background:rgba(255,201,74,.2)}
+#mob-bbar b{font-size:calc(var(--u)*18);line-height:1}
+#mob-bbar em{font:600 calc(var(--u)*8.5) var(--f);font-style:normal;color:var(--mu);margin-top:calc(var(--u)*2)}
+#mob-bbar.ter button:not([data-b=sd]):not([data-b=su]){display:none}
+#mob-bbar.ter button[data-b=sd] em,#mob-bbar.ter button[data-b=su] em{font-size:0}
+#mob-bbar.ter button[data-b=sd] em::before{content:'Brush';font-size:calc(var(--u)*8.5)}
+#mob-bbar.ter button[data-b=su] em::before{content:'Brush';font-size:calc(var(--u)*8.5)}
+
+/* ---------- panels, dialogs and menus: scroll on short screens, bigger touch targets ---------- */
+html.mob .pbody,html.mob #journal,html.mob #hsel,html.mob #chsel,html.mob #studio,html.mob #complete,html.mob #modal,html.mob #stm,html.mob .uiov{-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+html.mob input,html.mob select,html.mob textarea{font-size:16px}
+html.mob input[type=range]{min-height:28px}
+html.mob #tutp .tp-h span:last-child{pointer-events:auto;cursor:pointer;padding:calc(var(--u)*5) calc(var(--u)*10);margin:calc(var(--u)*-5) calc(var(--u)*-6) 0 0;border:1px solid rgba(255,201,74,.5);border-radius:calc(var(--u)*9);background:rgba(255,201,74,.1)}
+html.mob #tutp{pointer-events:none}
+html.mob #hsel .hs-col{position:sticky;bottom:-22px;margin:0 -26px -22px;padding:10px 26px 12px;background:linear-gradient(180deg,rgba(8,10,28,.9),rgba(4,6,18,.98));border-top:1px solid rgba(255,201,74,.35);z-index:3;backdrop-filter:blur(6px)}
+html.mob #hsel .pb,html.mob #hsel .sw{min-height:38px}
+html.mob #prompt i{display:block;margin:calc(var(--u)*2) 0 0;font-size:calc(var(--u)*10.5)}
+#mob-bbar.plc button:not([data-b=rl]):not([data-b=rr]){display:none}
+html.mob #talk .nt-h{font-size:0}
+html.mob #talk .nt-h::before{content:'Tap to continue · tap a choice · ✕ / ⏸ to leave';font-size:calc(var(--u)*11)}
+html.mob #st-hint{font-size:0!important}
+html.mob #st-hint::before{content:'1 finger: orbit · 2 fingers: pan & pinch-zoom · tap a part to select · drag the selected part to move it · fine-tune in the Part tab';font-size:calc(var(--u)*10.5);line-height:1.35}
+</style>
+<script id="nca-mobile">
+/* ============ MOB · touch controls and phone layout ============
+   Only runs when the boot script in <head> flagged a touch device (window.NCA_MOBILE). On desktop nothing here executes.
+   Design rule: the game itself is untouched. Every touch control drives the SAME code paths the keyboard and mouse use
+   (synthetic key / mouse events, or the camera variables the mouse-look writes), so combat, abilities, cooldowns, the tutorial,
+   multiplayer and the editors behave exactly as on desktop.
+   * Play: floating move stick on the left half (drag past the ring = sprint), drag the right half to look, pinch to zoom.
+     The real hotbar becomes a thumb cluster: ATTACK (hold = combo / draw the bow, drag it to aim), abilities around it,
+     ROLL, BLOCK (hold), JUMP. The interact prompt is a big tappable button. ☰ opens every keyboard-only function.
+   * Build mode: 1 finger selects / drags / paints / places (lift to place), 1 finger on empty ground orbits,
+     2 fingers pan + pinch-zoom, an action bar rotates / scales / raises / duplicates / deletes.
+   * Design Studio: 1 finger orbits / moves parts (as with the mouse), 2 fingers pan + pinch-zoom. */
+(()=>{if(!window.NCA_MOBILE)return;
+const D=document,de=D.documentElement,body=D.body,$m=id=>D.getElementById(id),clampm=(v,a,b)=>Math.max(a,Math.min(b,v));
+const mu=()=>1/(window.NCA_MSCALE||1);                       /* css px per physical px */
+/* ---------- touch settings (shared by both profiles: the key does not start with "nca_") ---------- */
+const ST={size:1,sens:1,haptic:true,left:false,inv:false,auto:false};
+try{Object.assign(ST,JSON.parse(localStorage.getItem('ncam_touch')||'{}'))}catch(e){}
+const saveST=()=>{try{localStorage.setItem('ncam_touch',JSON.stringify(ST))}catch(e){}};
+const buzz=ms=>{if(ST.haptic&&navigator.vibrate)try{navigator.vibrate(ms)}catch(e){}};
+/* ---------- synthetic input helpers ---------- */
+const KEYCH={Space:' ',Escape:'Escape',Enter:'Enter',Tab:'Tab',Delete:'Delete',PageUp:'PageUp',PageDown:'PageDown',BracketLeft:'[',BracketRight:']',ShiftLeft:'Shift',Slash:'/'};
+const keyOf=c=>KEYCH[c]||(c.startsWith('Key')?c.slice(3).toLowerCase():c.startsWith('Digit')?c.slice(5):c);
+const held=new Set();
+function kd(code,o){held.add(code);dispatchEvent(new KeyboardEvent('keydown',Object.assign({code,key:keyOf(code),bubbles:true,cancelable:true},o||{})))}
+function ku(code,o){held.delete(code);dispatchEvent(new KeyboardEvent('keyup',Object.assign({code,key:keyOf(code),bubbles:true,cancelable:true},o||{})))}
+function tap(code,o){kd(code,o);setTimeout(()=>ku(code,o),70)}
+const ZM=()=>window.NCA_ZOOM||1,aimX=()=>innerWidth/2*ZM(),aimY=()=>innerHeight/2*ZM();  /* synthetic events carry raw (unzoomed) coordinates like real ones */
+let atkHeld=false;
+function atkDown(){if(atkHeld)return;atkHeld=true;cv.dispatchEvent(new MouseEvent('mousedown',{button:0,buttons:1,clientX:aimX(),clientY:aimY(),bubbles:true,cancelable:true}))}
+function atkUp(){if(!atkHeld)return;atkHeld=false;dispatchEvent(new MouseEvent('mouseup',{button:0,buttons:0,clientX:aimX(),clientY:aimY(),bubbles:true,cancelable:true}))}
+function releaseAll(){for(const c of[...held])ku(c);atkUp();stickEnd();look.id=null;pinch.on=false;for(const k in ACT)endAct(+k)}
+/* ---------- the game runs "mouse-captured" all the time: the crosshair stays centred and touches never ask for pointer lock ---------- */
+try{MGC.fake=true}catch(e){}
+try{cv.requestPointerLock=function(){}}catch(e){}
+/* ---------- helpers on game state ---------- */
+const playing=()=>{try{return MODE==='play'&&playOn&&!body.classList.contains('mm')}catch(e){return false}};
+const uiOpen=()=>{try{return MGC.ui()||!!$m('mob-menu')&&$m('mob-menu').classList.contains('on')}catch(e){return false}};
+const ctlOn=()=>playing()&&!uiOpen()&&!transition&&!window.__pause;
+/* =====================================================================================================
+   MOVE STICK + LOOK (touches that land on the 3D view while playing)
+   ===================================================================================================== */
+const ui=D.createElement('div');ui.id='mob-ui';ui.innerHTML='<div id="mob-stk"><i id="mob-knb"></i></div><div id="mob-stkh"><i></i><span>MOVE</span></div><button id="mob-spr" type="button" title="Sprint lock">🏃</button><div id="mob-lookh">DRAG TO LOOK</div><button id="mob-tblk" type="button">🛡<em>BLOCK</em></button>';
+body.appendChild(ui);
+const stk=$m('mob-stk'),knb=$m('mob-knb'),stkh=$m('mob-stkh'),spr=$m('mob-spr');
+const JS={id:null,ox:0,oy:0,x:0,y:0,mag:0,sprint:false,lock:false};
+const look={id:null,x:0,y:0};
+const pinch={on:false,a:null,b:null,d0:0,dist0:0};
+const R=()=>58*mu()*ST.size;                                 /* stick radius in css px */
+function moveSide(x){return ST.left?x>innerWidth*.55:x<innerWidth*.45}
+function stickStart(t){const r=R(),m=r+14*mu();JS.id=t.identifier;JS.ox=clampm(t.clientX,m,innerWidth-m);JS.oy=clampm(t.clientY,m+40,innerHeight-m);JS.x=JS.y=JS.mag=0;
+ stk.style.left=JS.ox+'px';stk.style.top=JS.oy+'px';stk.classList.add('on');stkh.classList.add('off');stickMove(t)}
+function stickMove(t){const r=R();let dx=t.clientX-JS.ox,dy=t.clientY-JS.oy;const d=Math.hypot(dx,dy);
+ const sp=d>r*1.32;if(sp!==JS.sprint){JS.sprint=sp;sprintSync()}
+ if(d>r){dx*=r/d;dy*=r/d}JS.x=dx/r;JS.y=dy/r;JS.mag=Math.min(1,d/r);knb.style.transform=`translate(${dx}px,${dy}px)`;stk.classList.toggle('spr',JS.sprint||JS.lock)}
+function stickEnd(){if(JS.id===null&&!JS.sprint)return;JS.id=null;JS.x=JS.y=JS.mag=0;if(JS.sprint){JS.sprint=false;sprintSync()}stk.classList.remove('on','spr');knb.style.transform='';stkh.classList.remove('off')}
+function sprintSync(){const want=(JS.sprint||JS.lock)&&JS.id!==null;if(want&&!held.has('ShiftLeft'))kd('ShiftLeft');else if(!want&&held.has('ShiftLeft'))ku('ShiftLeft');spr.classList.toggle('on',JS.lock)}
+spr.addEventListener('touchstart',e=>{if(e.cancelable)e.preventDefault();e.stopPropagation();JS.lock=!JS.lock;buzz(10);sprintSync();stk.classList.toggle('spr',JS.lock)},{passive:false});
+/* analog movement: same output shape as the keyboard version (camera-relative unit vector), with a slow-walk zone near the centre */
+const _moveInput=window.moveInput;
+window.moveInput=function(cb){if(JS.id===null||JS.mag<.16||MODE!=='play')return _moveInput(cb);
+ const f=-JS.y,s=JS.x,sy=Math.sin(CY.yaw),cy=Math.cos(CY.yaw);let x=sy*f-cy*s,z=cy*f+sy*s;const l=Math.hypot(x,z)||1,k=clampm((JS.mag-.12)/.6,.45,1);cb(x/l*k,z/l*k,1)};
+/* camera look: the same variables and limits as the mouse-look */
+function lookBy(dx,dy){const k=.0046*ST.sens*(MGC.sens||1)/mu();CY.yaw-=dx*k;const inv=(MGC.inv?-1:1)*(ST.inv?-1:1);CY.pitch=clampm(CY.pitch+dy*k*.85*inv,MGC.on?MGC.PMIN:-.2,1.25);CY.auto=0}
+function zoomBy(r){const lo=MGC.on?2.5:4,hi=MGC.on?9:16;CY.dist=clampm(pinch.d0/r,lo,hi)}
+const tdist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+function findT(list,id){for(const t of list)if(t.identifier===id)return t;return null}
+cv.addEventListener('touchstart',e=>{if(MODE!=='play')return;if(e.cancelable)e.preventDefault();if(!ctlOn())return;
+ for(const t of e.changedTouches){
+  if(JS.id===null&&moveSide(t.clientX)){stickStart(t);continue}
+  if(look.id===null){look.id=t.identifier;look.x=t.clientX;look.y=t.clientY;$m('mob-lookh').classList.add('off');continue}
+  if(!pinch.on){const a=findT(e.touches,look.id);if(a){pinch.on=true;pinch.a=look.id;pinch.b=t.identifier;pinch.dist0=tdist(a,t);pinch.d0=CY.dist}}}},{passive:false});
+cv.addEventListener('touchmove',e=>{if(MODE!=='play')return;if(e.cancelable)e.preventDefault();if(!ctlOn())return;
+ if(pinch.on){const a=findT(e.touches,pinch.a),b=findT(e.touches,pinch.b);if(a&&b){zoomBy(tdist(a,b)/Math.max(20,pinch.dist0));return}}
+ for(const t of e.changedTouches){if(t.identifier===JS.id)stickMove(t);else if(t.identifier===look.id){lookBy(t.clientX-look.x,t.clientY-look.y);look.x=t.clientX;look.y=t.clientY}}},{passive:false});
+const tEnd=e=>{if(MODE!=='play')return;if(e.cancelable)e.preventDefault();for(const t of e.changedTouches){if(t.identifier===JS.id)stickEnd();if(t.identifier===look.id){if(pinch.on){const b=findT(e.touches,pinch.b);look.id=b?pinch.b:null;if(b){look.x=b.clientX;look.y=b.clientY}}else look.id=null;pinch.on=false;continue}if(pinch.on&&t.identifier===pinch.b){pinch.on=false;const a=findT(e.touches,look.id);if(a){look.x=a.clientX;look.y=a.clientY}}}};
+cv.addEventListener('touchend',tEnd,{passive:false});cv.addEventListener('touchcancel',tEnd,{passive:false});
+/* =====================================================================================================
+   ACTION CLUSTER: the game's own hotbar slots (icons, cooldowns, mana state all live) laid out for the right thumb
+   ===================================================================================================== */
+const ACT={};                                               /* touch id -> {el,act} */
+function actOf(el){const k=el.dataset.k;if(k)return k;if(el.dataset.i!==undefined)return 'ab'+el.dataset.i;return 'jump'}
+function startAct(t,el){const a=actOf(el);ACT[t.identifier]={el,a,x:t.clientX,y:t.clientY,moved:0};el.classList.add('mob-dn');buzz(a==='atk'?6:9);
+ if(a==='atk')atkDown();else if(a==='roll')kd('KeyR');else if(a==='blk'||a==='tblk')kd('KeyB');else if(a==='jump')kd('Space');else if(a.startsWith('ab')){const i=+a.slice(2);if(ABKEYS[i])kd(ABKEYS[i])}}
+function endAct(id){const s=ACT[id];if(!s)return;delete ACT[id];s.el.classList.remove('mob-dn');const a=s.a;
+ if(a==='atk')atkUp();else if(a==='roll')ku('KeyR');else if(a==='blk'||a==='tblk')ku('KeyB');else if(a==='jump')ku('Space');else if(a.startsWith('ab')){const i=+a.slice(2);if(ABKEYS[i])ku(ABKEYS[i])}}
+/* per-target listeners: the hotbar can be rebuilt (champion switch) while a finger is still down; a detached node still gets its own touchend */
+function bindTouchTarget(tg){if(tg._mobB)return;tg._mobB=1;
+ tg.addEventListener('touchmove',e=>{if(e.cancelable)e.preventDefault();for(const t of e.changedTouches){const s=ACT[t.identifier];if(!s)continue;const dx=t.clientX-s.x,dy=t.clientY-s.y;s.moved+=Math.abs(dx)+Math.abs(dy);s.x=t.clientX;s.y=t.clientY;
+  if(s.a==='atk'&&s.moved>12*mu())lookBy(dx,dy)}},{passive:false});
+ const end=e=>{if(e.cancelable)e.preventDefault();for(const t of e.changedTouches)endAct(t.identifier)};tg.addEventListener('touchend',end,{passive:false});tg.addEventListener('touchcancel',end,{passive:false})}
+function actTouchStart(e){const tg=e.target.closest&&e.target.closest('.ab,#mob-tblk');if(!tg)return;if(e.cancelable)e.preventDefault();e.stopPropagation();if(!ctlOn())return;
+ bindTouchTarget(e.target);for(const t of e.changedTouches)startAct(t,tg)}
+const abil=$m('abil');
+if(abil){abil.addEventListener('touchstart',actTouchStart,{passive:false});new MutationObserver(()=>layoutCluster()).observe(abil,{childList:true})}
+const tblk=$m('mob-tblk');tblk.dataset.k='tblk';tblk.addEventListener('touchstart',actTouchStart,{passive:false});
+/* ring geometry in physical px from the screen corner; scaled by the "button size" setting and squeezed on very short screens */
+function layoutCluster(){if(!abil)return;const u=mu(),sz=ST.size;const kids=[...abil.children];if(!kids.length)return;
+ const Hp=innerHeight/u,squeeze=clampm((Hp-40)/330,.72,1),g=u*sz*squeeze;
+ const AX=88,AY=84,RI=108,RO=178;
+ const abs=kids.filter(k=>k.dataset.i!==undefined),roll=kids.find(k=>k.dataset.k==='roll'),blk=kids.find(k=>k.dataset.k==='blk'),atk=kids.find(k=>k.dataset.k==='atk'),jump=kids.find(k=>!k.dataset.k&&k.dataset.i===undefined);
+ if(jump)jump.dataset.mobj='1';
+ const W=innerWidth,H=innerHeight,cx=ST.left?AX*g:W-AX*g,cy=H-AY*g,sx=ST.left?-1:1;
+ const put=(el,ang,r,s)=>{if(!el)return;const a=ang*Math.PI/180,x=cx+sx*Math.cos(a)*r*g,y=cy-Math.sin(a)*r*g,px=s*g;el.style.width=el.style.height=px+'px';el.style.left=(x-px/2)+'px';el.style.top=(y-px/2)+'px'};
+ const putXY=(el,dx,dy,s)=>{const x=cx-sx*dx*g,y=H-dy*g,px=s*g;el.style.width=el.style.height=px+'px';el.style.left=(x-px/2)+'px';el.style.top=(y-px/2)+'px'};
+ put(atk,0,0,96);
+ if(blk){put(jump,182,RI,60);put(blk,136,RI,56);put(roll,90,RI,56)}else{put(jump,178,RI,60);put(roll,100,RI,58)}
+ /* abilities 1-4 on the outer arc (stops short of the minimap), any extra ones (E / F / Q) in a row along the bottom edge */
+ const arc=abs.slice(0,4),row=abs.slice(4),na=arc.length;
+ arc.forEach((el,i)=>put(el,na===1?135:172+(98-172)*i/Math.max(1,na-1),RO,58));
+ row.forEach((el,i)=>putXY(el,AX+180+18+i*66,44,56));
+ /* tutorial-only block button sits where BLOCK would be */
+ const tp=136*Math.PI/180,tx=cx+sx*Math.cos(tp)*RI*g,ty=cy-Math.sin(tp)*RI*g,ts=56*g;Object.assign(tblk.style,{width:ts+'px',height:ts+'px',left:(tx-ts/2)+'px',top:(ty-ts/2)+'px'});
+ const sh=R()+14*u;Object.assign(stkh.style,{left:(ST.left?W-150*u*sz:150*u*sz)+'px',top:(H-128*u*sz)+'px'});
+ Object.assign(spr.style,{left:(ST.left?W-58*u*sz:14*u*sz)+'px',top:(H-58*u*sz)+'px'});
+ de.classList.toggle('mob-left',ST.left)}
+addEventListener('resize',()=>setTimeout(layoutCluster,60));
+/* =====================================================================================================
+   INTERACT: the game's own prompt ("E · Talk to …") becomes a big button
+   ===================================================================================================== */
+const prm=$m('prompt');
+if(prm){prm.addEventListener('touchstart',e=>{if(e.cancelable)e.preventDefault();e.stopPropagation();if(!ctlOn()||prm.classList.contains('lock'))return;buzz(12);prm.classList.add('mob-dn');setTimeout(()=>prm.classList.remove('mob-dn'),160);tap('KeyE')},{passive:false})}
+/* =====================================================================================================
+   TOP BAR: ☰ quick menu + ⏸ pause, always reachable
+   ===================================================================================================== */
+const top=$m('top');
+const mbtn=D.createElement('button');mbtn.id='mob-mbtn';mbtn.className='ib2';mbtn.type='button';mbtn.innerHTML='☰';mbtn.title='Menu';
+const pbtn=D.createElement('button');pbtn.id='mob-pbtn';pbtn.className='ib2';pbtn.type='button';pbtn.innerHTML='⏸';pbtn.title='Pause';
+const tbw=D.createElement('span');tbw.id='mob-tbw';tbw.appendChild(pbtn);tbw.appendChild(mbtn);if(top)top.appendChild(tbw);
+/* icon + label spans so very narrow screens can show icons only */
+for(const id of['herobtn','chbtn','studiobtn','lookbtn','jbtn']){const b=$m(id);if(!b||b.children.length)continue;const m=/^(\S+)\s+(.+)$/.exec(b.textContent.trim());if(m)b.innerHTML=`<i>${m[1]}</i><span class="tl"> ${m[2]}</span>`}
+pbtn.onclick=()=>{try{if(MODE==='play'&&typeof SET!=='undefined'){releaseAll();SET.pause()}}catch(e){}};
+/* quick menu */
+const menu=D.createElement('div');menu.id='mob-menu';menu.className='uiov';body.appendChild(menu);
+const fsEl=()=>D.fullscreenElement||D.webkitFullscreenElement;
+function goFull(){const r=D.documentElement,f=r.requestFullscreen||r.webkitRequestFullscreen;if(!f)return false;try{const p=f.call(r);if(p&&p.then)p.then(lockLand).catch(()=>{})}catch(e){}return true}
+function lockLand(){try{screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}
+D.addEventListener('fullscreenchange',()=>{if(fsEl())lockLand()});D.addEventListener('webkitfullscreenchange',()=>{if(fsEl())lockLand()});
+const canFull=!!(D.documentElement.requestFullscreen||D.documentElement.webkitRequestFullscreen);
+const isIOS=/iPhone|iPod/.test(navigator.userAgent)||(/iPad|Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1&&!canFull);
+function items(){const L=[],netOn=typeof NET!=='undefined'&&NET.on,build=MODE==='build';
+ const it=(ic,t,fn,o)=>L.push(Object.assign({ic,t,fn},o||{}));
+ if(!build){it('⏸','Pause & settings',()=>{releaseAll();SET.pause()});it('⚔','Champion',()=>openHeroSel(false));it('📖','Chapters',()=>$m('chbtn').click());it('📜','Journal',()=>openJournal());
+  it('📊','Attributes',()=>openStats());if(typeof HUBB!=='undefined'&&HUBB.openCodex)it('📕','Codex',()=>HUBB.openCodex());it('✎','Build mode',()=>setMode('build'));it('🛠','Design Studio',()=>$m('studiobtn').click());it('✨','Look',()=>$m('lookbtn').click());
+  if(netOn){it('💬','Chat',()=>openChatNow());it('👥','Social',()=>tap('KeyP'));it('🪪','My profile',()=>{try{NETUI.profileSelf()}catch(e){tap('KeyI')}});it('🎯','Profile of aimed player',()=>tap('KeyI'))}
+  it('🎥',MGC.on?'Camera: action (tap for classic)':'Camera: classic (tap for action)',()=>tap('KeyV'),{keep:1});
+  it('⌖',(typeof AIM!=='undefined'&&AIM.on)?'Free aim: on':'Free aim: off',()=>tap('KeyX'),{keep:1});
+  it(MUTE?'🔇':'🔊',MUTE?'Sound: off':'Sound: on',()=>tap('KeyM'),{keep:1});
+  if(typeof TUT!=='undefined'&&TUT.on){const s=TUT.steps[TUT.i];if(s&&!s.card)it('⏭','Skip this training step',()=>tap('KeyN'))}}
+ else{it('▶','Back to play',()=>setMode('play'));it('🛠','Design Studio',()=>$m('studiobtn').click());it('↶','Undo',()=>$m('t-undo').click(),{keep:1});it('↷','Redo',()=>$m('t-redo').click(),{keep:1});
+  it('◧','Toggle Models panel',()=>body.classList.toggle('mob-lc'),{keep:1});it('◨','Toggle Inspector panel',()=>body.classList.toggle('mob-rc'),{keep:1})}
+ if(canFull)it('⛶',fsEl()?'Leave full screen':'Full screen',()=>{if(fsEl()){(D.exitFullscreen||D.webkitExitFullscreen).call(D)}else goFull()});
+ return L}
+let menuItems=[];
+function renderMenu(){menuItems=items();
+ menu.innerHTML=`<div class="mm-box"><div class="mm-h"><b>MENU</b><button class="mm-x" data-x="1" type="button">✕</button></div><div class="mm-g">${menuItems.map((m,i)=>`<button type="button" data-m="${i}"><span>${m.ic}</span>${m.t}</button>`).join('')}</div>
+ <div class="mm-s"><h4>TOUCH CONTROLS</h4>
+  <label>Button size<span><button type="button" data-s="size" data-v="0.85" class="${ST.size<.95?'on':''}">S</button><button type="button" data-s="size" data-v="1" class="${ST.size>=.95&&ST.size<1.1?'on':''}">M</button><button type="button" data-s="size" data-v="1.18" class="${ST.size>=1.1?'on':''}">L</button></span></label>
+  <label>Look speed<span><button type="button" data-s="sens" data-v="0.6" class="${ST.sens<.8?'on':''}">Slow</button><button type="button" data-s="sens" data-v="1" class="${ST.sens>=.8&&ST.sens<1.3?'on':''}">Normal</button><button type="button" data-s="sens" data-v="1.6" class="${ST.sens>=1.3?'on':''}">Fast</button></span></label>
+  <label>Controls side<span><button type="button" data-s="left" data-v="0" class="${!ST.left?'on':''}">Stick left</button><button type="button" data-s="left" data-v="1" class="${ST.left?'on':''}">Stick right</button></span></label>
+  <label>Invert look<span><button type="button" data-s="inv" data-v="0" class="${!ST.inv?'on':''}">Off</button><button type="button" data-s="inv" data-v="1" class="${ST.inv?'on':''}">On</button></span></label>
+  ${navigator.vibrate?`<label>Vibration<span><button type="button" data-s="haptic" data-v="1" class="${ST.haptic?'on':''}">On</button><button type="button" data-s="haptic" data-v="0" class="${!ST.haptic?'on':''}">Off</button></span></label>`:''}
+  ${isIOS?'<p class="mm-n">For true full screen on iPhone: Share → <b>Add to Home Screen</b>, then play from the icon.</p>':''}
+  <p class="mm-n">Desktop version on this device: add <b>?mobile=0</b> to the address.</p></div></div>`}
+function openMenu(){releaseAll();renderMenu();menu.classList.add('on')}
+function closeMenu(){menu.classList.remove('on')}
+mbtn.onclick=()=>{menu.classList.contains('on')?closeMenu():openMenu()};
+menu.addEventListener('click',e=>{if(e.target===menu||e.target.closest('[data-x]')){closeMenu();return}
+ const b=e.target.closest('[data-m]');if(b){const m=menuItems[+b.dataset.m];if(!m)return;if(!m.keep)closeMenu();try{m.fn()}catch(x){console.warn('mob menu',x)}if(m.keep)setTimeout(renderMenu,120);return}
+ const s=e.target.closest('[data-s]');if(s){const k=s.dataset.s,v=s.dataset.v;ST[k]=(k==='left'||k==='inv'||k==='haptic')?v==='1':+v;saveST();layoutCluster();renderMenu()}});
+function openChatNow(){try{NETUI.openChat('');const i=D.querySelector('#chat input,#chat textarea');if(i)i.focus()}catch(e){tap('KeyT')}}
+/* =====================================================================================================
+   BUILD MODE (editor) — gestures on the 3D view + an action bar for the selected object
+   ===================================================================================================== */
+const bbar=D.createElement('div');bbar.id='mob-bbar';
+bbar.innerHTML=[['rl','⟲','Rotate'],['rr','⟳','Rotate'],['sd','−','Smaller'],['su','＋','Bigger'],['up','⤒','Raise'],['dn','⤓','Lower'],['fo','◎','Focus'],['du','⧉','Copy'],['de','🗑','Delete']].map(b=>`<button type="button" data-b="${b[0]}"><b>${b[1]}</b><em>${b[2]}</em></button>`).join('');
+body.appendChild(bbar);
+bbar.addEventListener('click',e=>{const b=e.target.closest('[data-b]');if(!b)return;buzz(8);const a=b.dataset.b;
+ ({rl:()=>tap('KeyR',{shiftKey:true}),rr:()=>tap('KeyR'),sd:()=>tap('BracketLeft'),su:()=>tap('BracketRight'),up:()=>tap('PageUp'),dn:()=>tap('PageDown'),fo:()=>tap('KeyF'),du:()=>tap('KeyD',{ctrlKey:true}),de:()=>tap('Delete')})[a]()});
+const ltog=D.createElement('button');ltog.id='mob-ltog';ltog.type='button';ltog.textContent='◧';ltog.title='Models panel';body.appendChild(ltog);
+const rtog=D.createElement('button');rtog.id='mob-rtog';rtog.type='button';rtog.textContent='◨';rtog.title='Inspector';body.appendChild(rtog);
+ltog.onclick=()=>body.classList.toggle('mob-lc');rtog.onclick=()=>body.classList.toggle('mob-rc');
+body.classList.add('mob-rc');                               /* inspector starts tucked away so the view has room */
+/* generic two-finger gesture recogniser for a canvas driven by pointer events.
+   While two fingers are down the canvas' own handlers see nothing (the gesture owns them until every finger lifts). */
+function gestures(getCanvas,active,api){const pts=new Map();let g=null,swallow=false;
+ const mid=()=>{const v=[...pts.values()];return{x:(v[0].x+v[1].x)/2,y:(v[0].y+v[1].y)/2,d:Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)}};
+ addEventListener('pointerdown',e=>{const c=getCanvas();if(!c||e.target!==c||e.pointerType!=='touch'||!active())return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===2){api.cancel(e);const m=mid();g={x:m.x,y:m.y,d:m.d};swallow=true}
+  if(swallow||pts.size>2){e.stopImmediatePropagation();e.preventDefault()}},true);
+ addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;pts.get(e.pointerId).x=e.clientX;pts.get(e.pointerId).y=e.clientY;
+  if(swallow){e.stopImmediatePropagation();if(g&&pts.size>=2){const m=mid();api.pan(m.x-g.x,m.y-g.y);if(g.d>20&&m.d>20)api.zoom(g.d/m.d);g.x=m.x;g.y=m.y;g.d=m.d}}},true);
+ const up=e=>{if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);if(swallow){e.stopImmediatePropagation();if(pts.size<2)g=null;if(pts.size===0)swallow=false}};
+ addEventListener('pointerup',up,true);addEventListener('pointercancel',up,true)}
+let synthUp=false;
+const edOn=()=>{try{return MODE==='build'&&Edit.on}catch(e){return false}};
+gestures(()=>cv,edOn,{
+ cancel(e){try{synthUp=true;cv.dispatchEvent(new PointerEvent('pointerup',{pointerId:-77,pointerType:'touch',clientX:mouse.x*ZM(),clientY:mouse.y*ZM(),bubbles:true}));synthUp=false;EC.drag=null;placeT=null}catch(x){synthUp=false}},
+ pan(dx,dy){const sy=Math.sin(EC.yaw),cy=Math.cos(EC.yaw),k=EC.dist*.0016;EC.tx+=(-cy*dx*-1)*k*-1+(-sy*dy)*k*-1*-1;EC.tz+=(sy*dx)*k+(-cy*dy)*k*-1*-1},
+ zoom(r){EC.dist=clampm(EC.dist*r,4,170)}});
+/* single finger in build mode: placing works as "drag the ghost, lift to drop"; touching empty ground orbits the camera */
+let placeT=null;
+addEventListener('pointerdown',e=>{if(e.target!==cv||e.pointerType!=='touch'||!edOn())return;
+ if(Edit.tool==='place'){e.stopImmediatePropagation();mouse.x=e.clientX;mouse.y=e.clientY;mouse.in=true;placeT={id:e.pointerId,x:e.clientX,y:e.clientY}}},true);
+let pend=null;
+addEventListener('pointerup',e=>{if(!placeT||e.pointerId!==placeT.id||synthUp)return;placeT=null;if(!edOn()||Edit.tool!=='place')return;
+ mouse.x=e.clientX;mouse.y=e.clientY;mouse.in=true;pend={n:0};
+ /* the editor positions the ghost under mouse.x/y every frame; drop it once a frame has put it under the lifted finger */
+ const step=()=>{if(!pend)return;mouse.in=true;const g=Edit.ghost;if(g&&g.visible&&g.userData.gp&&pend.n>=1){pend=null;try{placeGhost()}catch(x){}mouse.in=false;return}if(++pend.n>40||!edOn()){pend=null;mouse.in=false;return}requestAnimationFrame(step)};requestAnimationFrame(step)},true);
+addEventListener('pointerleave',e=>{if(pend&&e.target===cv)e.stopImmediatePropagation()},true);
+cv.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||!edOn())return;if(Edit.tool==='select'&&!Edit.dragO&&!EC.drag)EC.drag={x:e.clientX,y:e.clientY,pan:false}});
+/* Design Studio canvas */
+const DSo=()=>{try{return window.__studioDS&&window.__studioDS.DS}catch(e){return null}};
+gestures(()=>$m('st-cv'),()=>{const d=DSo();return !!(d&&d.open)},{
+ cancel(){const d=DSo();if(d)d.drag=null},
+ pan(dx,dy){const o=DSo().orbit,k=o.dist*.0016,cy=Math.cos(o.yaw),sy=Math.sin(o.yaw);o.tx-=(cy*dx)*k;o.tz+=(sy*dx)*k;o.ty+=dy*k},
+ zoom(r){const o=DSo().orbit;o.dist=clampm(o.dist*r,1.2,40)}});
+/* =====================================================================================================
+   WORDING: keyboard hints become touch hints (text only — the game logic is untouched)
+   ===================================================================================================== */
+const KBMAP={LMB:'ATTACK',RMB:'BLOCK',MMB:'—',Space:'JUMP','␣':'JUMP',Shift:'SPRINT',Esc:'⏸',Tab:'✎ BUILD',WASD:'STICK',Enter:'💬'};
+const LOCAL={E:'TAP',C:'☰',J:'☰',H:'☰',N:'⏭'};
+function relabel(root){if(!root||!root.querySelectorAll)return;for(const k of root.querySelectorAll('kbd')){if(k.dataset.mob)continue;const t=(k.textContent||'').trim();
+ if(k.closest('#prompt,#abil')){continue}let v=KBMAP[t];if(!v&&LOCAL[t]&&k.closest('#tracker,#ptsb,#tutp'))v=LOCAL[t];if(v){k.dataset.mob=t;k.textContent=v}else k.dataset.mob='='}}
+new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1){if(n.tagName==='KBD'){const p=n.parentNode;if(p)relabel(p)}else relabel(n)}}).observe(body,{childList:true,subtree:true});
+relabel(body);
+/* the tutorial panel's "N skip" chip becomes a tap target */
+D.addEventListener('click',e=>{const h=e.target.closest&&e.target.closest('#tutp .tp-h span:last-child');if(h){buzz(8);tap('KeyN')}});
+const hint=$m('hint');if(hint)hint.innerHTML='<b>Left side</b> drag to move · push past the ring to sprint<br><b>Right side</b> drag to look · pinch to zoom<br><b>ATTACK</b> &amp; abilities bottom-right · <b>☰</b> menu · <b>⏸</b> pause';
+/* the journal's controls list describes the touch controls (the rest of the journal is unchanged) */
+const _openJournal=window.openJournal;
+if(typeof _openJournal==='function')window.openJournal=function(){const r=_openJournal.apply(this,arguments);try{const c=D.querySelector('#journal .ctl');if(c){const K=KIT();
+ c.innerHTML=`<span><kbd>Left side</kbd> drag to move (a stick appears under your thumb)</span><span><kbd>Past the ring</kbd> sprint · <kbd>🏃</kbd> locks sprint</span><span><kbd>JUMP</kbd> jump${K.wj||/akira|vesper|willow|alita/.test(Hero.key)?' · again against a wall to wall-jump':''}</span><span><kbd>ATTACK</kbd> ${K.bow?'hold to draw · release to shoot':'attack combo (hold to chain)'} · drag it to aim</span><span><kbd>Ability buttons</kbd> cast · the timer shows the cooldown</span><span><kbd>ROLL</kbd> roll out of danger</span>${K.block?'<span><kbd>BLOCK</kbd> hold to block · tap just before a hit to parry</span>':''}<span><kbd>Right side</kbd> drag to look &amp; aim in 3D · <kbd>pinch</kbd> zoom</span><span>Ground spells land under the crosshair, up to their max range (amber = out of reach)</span><span><kbd>TAP</kbd> the glowing prompt to interact</span><span><kbd>☰</kbd> champion, chapters, attributes, camera, free aim, sound, touch settings</span><span><kbd>⏸</kbd> pause &amp; settings</span>`;c.querySelectorAll('kbd').forEach(k=>k.dataset.mob='=')}}catch(e){}return r};
+/* the guided tutorial explains touch controls instead of keys (same steps, same goals) */
+function patchTut(){if(typeof TUT==='undefined'||!TUT.steps||TUT._mob)return;TUT._mob=1;const by={};for(const s of TUT.steps)by[s.t]=s;const set=(t,f)=>{if(by[t])by[t].b=f};
+ set('Move',()=>'Put your thumb on the <b>left half</b> of the screen and drag — a stick appears under it. Run around a little.');
+ set('Look around',()=>'Drag on the <b>right half</b> of the screen to turn the camera. Pinch with two fingers to zoom.');
+ set('Sprint & jump',()=>'Push the stick <b>past its ring</b> to sprint (or tap <b>🏃</b> to lock sprint), and tap <b>JUMP</b>.');
+ set('Fight!',()=>{const K=KIT();return (K.bow?'<b>Hold ATTACK</b> to draw your bow and release to fire.':'Tap <b>ATTACK</b> (bottom right) — keep tapping or hold it to chain a combo.')+' Drag the ATTACK button to aim while you fight. Defeat the two <b>training Parasites</b>; attacks go where the crosshair points.'});
+ set('Roll & block',()=>'Tap <b>ROLL</b> to roll out of danger and hold <b>BLOCK</b> to block. A block timed just before a hit is a <b>parry</b>.');
+ set('Use your abilities',()=>{let n='';try{n=KIT().ab.map(a=>`${a.icon||'✦'} ${a.name}`).join(' · ')}catch(e){}return `Tap the ability buttons around <b>ATTACK</b> to cast. Cast <b>two</b> different abilities.<br><small style="color:var(--mu)">${n}</small>`});
+ set('Character attributes',()=>'Tap <b>Stats</b> under your health bar (or <b>☰ → Attributes</b>) — spend points on Power, Life, <b>Life Steal</b>, Crit, Speed and more, then close it.');
+ set('Meet Aurealius',()=>'The Keeper of the Codex knows your story. Follow the <b style="color:var(--go)">golden beacon</b>, walk up to him and tap the <b>Talk</b> button that appears.');
+ set('The story chapters',()=>'Tap <b>📖 Chapters</b> in the top bar to see the story. Close it when you are done looking.');
+ const done=by['Training complete'];if(done){const f=done.b;done.b=()=>f().replace(/<kbd>[^<]*<\/kbd>/g,'<b>⏸</b>')}}
+/* =====================================================================================================
+   PER-FRAME: show / hide controls for the current situation
+   ===================================================================================================== */
+let lastState='',cvSet=false;
+function frame(){requestAnimationFrame(frame);
+ if(!cvSet&&typeof TUT!=='undefined'){patchTut();cvSet=true}
+ const pl=playing(),ui_=uiOpen(),on=pl&&!ui_&&!(typeof P!=='undefined'&&P.dead);
+ const st=(pl?'p':'')+(on?'o':'')+(MODE==='build'?'b':'');
+ if(st!==lastState){lastState=st;body.classList.toggle('mob-play',on);body.classList.toggle('mob-build',MODE==='build');if(!on)releaseAll();layoutCluster()}
+ if(on){try{if(!MGC.on){AIM.sx=innerWidth/2;AIM.sy=innerHeight/2}}catch(e){}
+  let need=false;try{need=TUT.on&&TUT.steps[TUT.i]&&TUT.steps[TUT.i].t==='Roll & block'&&!abil.querySelector('[data-k=blk]')}catch(e){}tblk.classList.toggle('on',need)}
+ if(MODE==='build'){let sel=false;try{sel=Edit.on&&(!!selObj()||Edit.tool==='place'||Edit.tool==='terrain')}catch(e){}bbar.classList.toggle('on',sel);bbar.classList.toggle('plc',(()=>{try{return Edit.tool==='place'}catch(e){return false}})());bbar.classList.toggle('ter',(()=>{try{return Edit.tool==='terrain'}catch(e){return false}})())}else bbar.classList.remove('on')}
+requestAnimationFrame(frame);
+addEventListener('blur',releaseAll);D.addEventListener('visibilitychange',()=>{if(D.hidden)releaseAll()});
+setTimeout(layoutCluster,500);
+window.MOB={ST,layout:layoutCluster,openMenu,closeMenu,releaseAll,JS,look,get state(){return lastState}};
+})();
 </script>
 </body></html>
