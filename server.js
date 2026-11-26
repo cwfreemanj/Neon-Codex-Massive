@@ -404,7 +404,7 @@ function onMessage(c, raw) {
       const r = c.room; if (!r || r.members.size < 2 || !Array.isArray(m.b) || !m.b.length) return; if (!bucket(c, 'fx', 40, 80)) return;
       const o2 = { t: 'fx', b: m.b, p: Array.isArray(m.p) ? m.p.slice(0, 3) : null, from: c.id }; if (JSON.stringify(o2).length > 40000) return; sendRoom(r, o2, c.id); return; }
     case 'join': return handleJoin(c, m);
-    case 'pos': c.x = q2(clamp(num(m.x), -400, 400)); c.y = q2(clamp(num(m.y), -50, 200)); c.z = q2(clamp(num(m.z), -400, 400)); c.f = q2(num(m.f)); c.s = q2(clamp(num(m.s), 0, 30)); c.a = clamp(m.a | 0, 0, 31); c.k = typeof m.k === 'string' ? m.k.replace(/[^a-z0-9_]/gi, '').slice(0, 14) : ''; c.u = q2(clamp(num(m.u), 0, 1)); c.moved = true; return;
+    case 'pos': c.x = q2(clamp(num(m.x), -400, 400)); c.y = q2(clamp(num(m.y), -50, 200)); c.z = q2(clamp(num(m.z), -400, 400)); c.f = q2(num(m.f)); c.s = q2(clamp(num(m.s), 0, 30)); c.a = clamp(m.a | 0, 0, 63); c.k = typeof m.k === 'string' ? m.k.replace(/[^a-z0-9_]/gi, '').slice(0, 14) : ''; c.u = q2(clamp(num(m.u), 0, 1)); c.moved = true; return;
     case 'appear': { if (HEROES.includes(m.hero)) p.hero = m.hero; if (m.pal && typeof m.pal === 'object') p.pal = cleanPal(m.pal); setPres(p, m.pr); markDirty(); return broadcastAppear(c); }
     case 'emote': if (c.room && !limited(c, 'chat')) sendRoom(c.room, { t: 'emote', id: c.id, e: clamp(m.e | 0, 0, 15) }); return;
     case 'chat': {
