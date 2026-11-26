@@ -255,3 +255,25 @@ refused. The `pos` flags field already allowed 0–31; bit 16 now means "Maeve i
 No other server change is needed. Redeploy `server.js` together with the new `index.html`.
 In the game (both campaign and multiplayer) the six are locked behind stars like the other newer champions:
 Isolde & Cassian 300★, Rook & Rhoka 450★, Maeve 600★, Elara 750★.
+
+## Update: Book II · The Rise of the Corinthians (Lucia, Luxio, premium store, coupon)
+* **New champions** `lucia` and `luxio` are accepted in `hello` / `appear`. `pal.v` (1 or 2) carries the chosen *design*
+  (Eclipse Seraph / Ashen Tyrant) so other players see it. Chapters cap raised to 14 (Book II adds chapters VIII–XIV, shown as Book II · I–VII).
+* **Entitlements** live on the account (`p.ent = {heroes, skins, all}`), are sent in `welcome` (`ent`) and pushed live as `{t:'ent'}`.
+* **Premium SKUs** (real money, through the same Wix flow as star packs). Add them to the `PACKS` table in `backend/nca.web.js`:
+  ```js
+  champ_lucia:    { item: true, name: 'Lucia',             price: 5.99 },
+  champ_luxio:    { item: true, name: 'Luxio',             price: 5.99 },
+  bundle_corinth: { item: true, name: 'Corinthian Bundle', price: 10.99 },   // both + both alternate designs
+  ```
+  In `createOrder`, name the item with `p.item ? p.name : p.stars + ' Stars'`. `creditStars` already sends `sku` in the signed body; for these
+  three SKUs the server ignores `stars` and unlocks the content instead (idempotent per `orderId`; held until an unlinked Wix member signs in).
+  The game posts `{source:'nca', type:'buy', sku, item:1, price}` to the page, exactly like star packs. Test without Wix:
+  `DEV_GRANT=1` + `?wixtest=1` (the store then grants the SKU through `{t:'devbuy'}`).
+* **Coupon codes.** `COUPON_CODES` env var, comma list, default `ALLOFTHEM` (case-insensitive). A valid code unlocks every locked
+  champion (the ★-priced ones, the six from the last update and Lucia + Luxio) and both designs. Players type it in the Champions (H) menu.
+  Over the websocket: `{t:'redeem', code}` → `{t:'redeemed', ok, ent}`. Over HTTP (Campaign mode): `POST /redeem {code}` with an optional
+  `x-token` header (with a token the unlock is saved on the account, without one it is stored on that device). `GET /ent` (x-token) returns
+  the account's unlocks. Redemptions are counted in `misc.json → coupons`. HTTP redeem is limited to 10 tries a minute per IP.
+* To change or retire the code, set `COUPON_CODES` in Railway → Variables (e.g. `ALLOFTHEM,LAUNCHWEEK`), or set it to a random string to
+  disable it. Unlocks already granted stay granted.

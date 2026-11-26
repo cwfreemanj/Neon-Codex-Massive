@@ -131,6 +131,21 @@ function post(p, body, sig) { return new Promise(res => { const r = http.request
     const body2 = JSON.stringify({ memberId: 'wix-123', orderId: 'ord-2', stars: 100 }); const r2 = await post('/wix/credit', body2, hmac(body2)); const lst = await w.wait(m => m.t === 'stars' && m.bal === 600); ok(r2.j.credited && lst.bal === 600, 'credit for a linked, online member is pushed live');
     const forged = await login(URL, 'Forger', { wix: { id: 'wix-123', ts, sig: 'deadbeef' } }); ok(forged.w.t === 'welcome' && !forged.w.wix, 'forged Wix signature does not take over the account');
 
+    console.log('premium champions + coupon');
+    const bodyL = JSON.stringify({ memberId: 'wix-123', orderId: 'ord-L1', sku: 'champ_lucia' }); const rl = await post('/wix/credit', bodyL, hmac(bodyL)); const el = await w.wait(m => m.t === 'ent' && m.ent.heroes.lucia); ok(rl.j.credited && rl.j.sku === 'champ_lucia' && el.ent.heroes.lucia && !el.ent.heroes.luxio, 'buying Lucia ($5.99 SKU) unlocks only Lucia, live');
+    ok((await post('/wix/credit', bodyL, hmac(bodyL))).j.duplicate === true, 'a premium order is idempotent too');
+    const bodyB = JSON.stringify({ memberId: 'wix-777', orderId: 'ord-B1', sku: 'bundle_corinth' }); const rb = await post('/wix/credit', bodyB, hmac(bodyB)); ok(rb.j.ok && !rb.j.credited, 'bundle for an unlinked member is held pending');
+    const ts2 = Date.now(); const w2 = await login(URL, 'BundleBuyer', { wix: { id: 'wix-777', ts: ts2, sig: hmac('wix-777|' + ts2) } }); ok(w2.w.ent && w2.w.ent.heroes.lucia && w2.w.ent.heroes.luxio && w2.w.ent.skins.lucia && w2.w.ent.skins.luxio, 'linking releases the bundle: both champions + both designs');
+    b.send({ t: 'redeem', code: 'nope' }); const rr0 = await b.wait(m => m.t === 'redeemed'); ok(rr0.ok === false, 'a wrong code is refused');
+    b.clear(); b.send({ t: 'redeem', code: ' allofthem ' }); const rr1 = await b.wait(m => m.t === 'redeemed'); ok(rr1.ok && rr1.ent.all && rr1.ent.heroes.lucia && rr1.ent.heroes.luxio && rr1.ent.heroes.alita && rr1.ent.heroes.elara, 'ALLOFTHEM unlocks every locked champion incl. Lucia and Luxio');
+    const ge = await get('/ent', { 'x-token': b.w.token }); ok(ge.code === 200 && ge.j.ent.all, 'GET /ent returns the account entitlements (Campaign uses this)');
+    ok((await get('/ent')).code === 401, 'GET /ent needs a token');
+    const hr = await postJ('/redeem', { code: 'ALLOFTHEM' }); ok(hr.code === 200 && hr.j.ok && !hr.j.account && hr.j.ent.heroes.lucia, 'HTTP redeem without an account works (device unlock)');
+    const hr2 = await postJ('/redeem', { code: 'WRONG' }); ok(hr2.code === 400 && !hr2.j.ok, 'HTTP redeem refuses a wrong code');
+    A.clear(); A.send({ t: 'devbuy', sku: 'champ_luxio' }); const ed = await A.wait(m => m.t === 'ent'); ok(ed.ent.heroes.luxio && !ed.ent.heroes.lucia, 'test purchase (DEV_GRANT) grants the SKU');
+    A.send({ t: 'appear', hero: 'lucia', pal: { armor: '#ffffff', v: 1 } }); await sleep(80); b.clear(); b.send({ t: 'profile', id: A.w.id }); const pv = await b.wait(m => m.t === 'profile' && m.p.id === A.w.id); ok(pv.p.hero === 'lucia' && pv.p.pal.v === 1, 'Lucia + design variant are accepted and shown to others');
+    A.send({ t: 'appear', hero: 'starr', pal: {} }); await sleep(60);
+
     console.log('accounts across devices');
     const pa1 = await login(URL, 'Paula'); ok(pa1.w.t === 'welcome' && pa1.w.hasPw === false, 'new account has no password yet');
     pa1.send({ t: 'setpw', pw: '123' }); const pws = await pa1.wait(m => m.t === 'pwset'); ok(!pws.ok, 'too-short password refused');

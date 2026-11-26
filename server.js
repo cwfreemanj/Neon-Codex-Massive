@@ -28,7 +28,7 @@ const F_PLAYERS = path.join(DATA_DIR, 'players.json'), F_GUILDS = path.join(DATA
 function readJSON(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return d; } }
 const players = new Map(Object.entries(readJSON(F_PLAYERS, {})));
 const guilds = new Map(Object.entries(readJSON(F_GUILDS, {})));
-const misc = readJSON(F_MISC, { orders: {}, pending: {}, seq: 1 });
+const misc = readJSON(F_MISC, { orders: {}, pending: {}, seq: 1 }); misc.pendingEnt = misc.pendingEnt || {}; misc.coupons = misc.coupons || {};
 let dirty = false, saveT = null;
 function markDirty() { dirty = true; if (!saveT) saveT = setTimeout(flush, 1500); }
 function writeAtomic(f, obj) { const t = f + '.tmp'; fs.writeFileSync(t, typeof obj === 'string' || Buffer.isBuffer(obj) ? obj : JSON.stringify(obj)); fs.renameSync(t, f); }
@@ -75,7 +75,15 @@ function safeEq(a, b) { try { const x = Buffer.from(String(a)), y = Buffer.from(
 function seeded(seed) { let h = 1779033703 ^ seed.length; for (let i = 0; i < seed.length; i++) { h = Math.imul(h ^ seed.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return () => { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
 
 /* ---------------------------------------------------------------- game data */
-const HEROES = ['starr', 'aurealius', 'willow', 'akira', 'talos', 'dante', 'seraphine', 'vesper', 'brigid', 'fenn', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara'];
+const HEROES = ['starr', 'aurealius', 'willow', 'akira', 'talos', 'dante', 'seraphine', 'vesper', 'brigid', 'fenn', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara', 'lucia', 'luxio'];
+/* ---- premium content (Book II: The Rise of the Corinthians) ----
+   ITEMS: what each real-money SKU unlocks (prices live in your Wix backend PACKS table, see README).
+   COUPONS: comma list in env COUPON_CODES (default ALLOFTHEM) – unlocks every locked champion incl. the premium ones. */
+const PREMIUM = ['lucia', 'luxio'];
+const LOCKED_ALL = ['seraphine', 'fenn', 'vesper', 'brigid', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara', 'lucia', 'luxio'];
+const ITEMS = { champ_lucia: { heroes: ['lucia'] }, champ_luxio: { heroes: ['luxio'] }, bundle_corinth: { heroes: ['lucia', 'luxio'], skins: ['lucia', 'luxio'] } };
+const COUPONS = (process.env.COUPON_CODES || 'ALLOFTHEM').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+
 const GUILD_ICONS = ['⚔', '🛡', '🏹', '🔥', '❄', '⚡', '🌿', '💀', '👑', '🐉', '🌙', '☀', '🦅', '🐺', '💎', '🔱'];
 const G_LV = [0, 120, 480, 1200, 2700, 5400, 9600, 15600, 24000, 36000]; // total member playtime (minutes) needed for level 1..10
 const guildLevel = g => { let l = 1; for (let i = 1; i < G_LV.length; i++) if (g.play >= G_LV[i]) l = i + 1; return l; };
@@ -277,6 +285,14 @@ function pwMake(pw) { const salt = rid(12); return { salt, hash: crypto.scryptSy
 function pwOk(p, pw) { if (!p.pw || typeof pw !== 'string' || !pw) return false; try { return safeEq(crypto.scryptSync(pw, p.pw.salt, 32).toString('hex'), p.pw.hash); } catch (e) { return false; } }
 function addToken(p) { const tok = rid(24), h = sha(tok); p.tokens = (p.tokens || []).concat(h); while (p.tokens.length > 12) tokenIdx.delete(p.tokens.shift()); tokenIdx.set(h, p.id); markDirty(); return tok; }
 const pwFails = new Map();         // name/ip -> {n, t}
+/* entitlements: p.ent = {heroes:{lucia:1}, skins:{lucia:1}, all:1} */
+function entOf(p) { const e = p.ent || {}; return { heroes: Object.assign({}, e.heroes), skins: Object.assign({}, e.skins), all: !!e.all }; }
+function grantEnt(p, g, why) { p.ent = p.ent || { heroes: {}, skins: {} }; p.ent.heroes = p.ent.heroes || {}; p.ent.skins = p.ent.skins || {};
+  for (const h of g.heroes || []) if (HEROES.includes(h)) p.ent.heroes[h] = 1; for (const h of g.skins || []) if (HEROES.includes(h)) p.ent.skins[h] = 1; if (g.all) p.ent.all = 1;
+  markDirty(); sendId(p.id, { t: 'ent', ent: entOf(p), why: why || '' }); return entOf(p); }
+const ALL_GRANT = { heroes: LOCKED_ALL, skins: PREMIUM, all: 1 };
+function redeem(p, code) { const c = String(code || '').trim().toUpperCase(); if (!c || !COUPONS.includes(c)) return null;
+  misc.coupons[c] = (misc.coupons[c] || 0) + 1; markDirty(); return p ? grantEnt(p, ALL_GRANT, 'coupon') : entOf({ ent: { heroes: Object.fromEntries(LOCKED_ALL.map(h => [h, 1])), skins: Object.fromEntries(PREMIUM.map(h => [h, 1])), all: 1 } }); }
 function throttled(k) { const f = pwFails.get(k); return !!(f && f.n >= 6 && now() - f.t < 10 * 60000); }
 function failed(k) { const f = pwFails.get(k) || { n: 0, t: now() }; if (now() - f.t > 10 * 60000) { f.n = 0; f.t = now(); } f.n++; pwFails.set(k, f); }
 function authenticate(m, ip) {
@@ -295,7 +311,7 @@ function authenticate(m, ip) {
   }
   if (!p && m.recover) return { err: 'That recovery key does not match any account on this server.', code: 'nokey' };
   if (!p) { if (!validName(name)) return { err: 'Names are 3–16 letters, numbers, spaces, _ or -.' }; p = newPlayer(name); newTok = addToken(p); if (typeof m.newpw === 'string' && m.newpw.length >= PW_MIN && m.newpw.length <= 64) p.pw = pwMake(m.newpw); }
-  if (wixId && !p.wix) { p.wix = wixId; const pend = misc.pending[wixId]; if (pend) { p.stars += pend; delete misc.pending[wixId]; } markDirty(); }
+  if (wixId && !p.wix) { p.wix = wixId; const pend = misc.pending[wixId]; if (pend) { p.stars += pend; delete misc.pending[wixId]; } const pe = misc.pendingEnt[wixId]; if (pe) { for (const s of pe) if (ITEMS[s]) { p.ent = p.ent || {}; grantEnt(p, ITEMS[s], 'purchase'); } delete misc.pendingEnt[wixId]; } markDirty(); }
   if (wixId && !newTok && !(m.token && tokenIdx.get(sha(m.token)) === p.id)) newTok = addToken(p);
   return { p, token: newTok };
 }
@@ -306,16 +322,16 @@ function onHello(c, m) {
   if (HEROES.includes(m.hero)) p.hero = m.hero; if (m.pal && typeof m.pal === 'object') p.pal = cleanPal(m.pal); setPres(p, m.pr);
   c.bucket = EARN_PER_MIN; c.bt = now(); c.joined = now();
   const g = p.guild && guilds.get(p.guild); if (p.guild && !g) p.guild = null;
-  send(c, { t: 'welcome', id: p.id, name: p.name, token: a.token, stars: p.stars, wix: !!p.wix, profile: profileOf(p, p), quests: ensureQuests(p), guild: g ? guildState(g, p.id) : null, invites: p.gInv.map(i => ({ guild: i.guild, name: i.name, from: i.fromName })), hasSave: !!(p.save && p.save.t), saveT: p.save ? p.save.t | 0 : 0, hasPw: !!p.pw, devGrant: DEV_GRANT, caps: { hub: HUB_CAP, party: PARTY_MAX, guildCost: GUILD_COST }, icons: GUILD_ICONS, lvTable: G_LV });
+  send(c, { t: 'welcome', id: p.id, name: p.name, token: a.token, stars: p.stars, ent: entOf(p), wix: !!p.wix, profile: profileOf(p, p), quests: ensureQuests(p), guild: g ? guildState(g, p.id) : null, invites: p.gInv.map(i => ({ guild: i.guild, name: i.name, from: i.fromName })), hasSave: !!(p.save && p.save.t), saveT: p.save ? p.save.t | 0 : 0, hasPw: !!p.pw, devGrant: DEV_GRANT, caps: { hub: HUB_CAP, party: PARTY_MAX, guildCost: GUILD_COST }, icons: GUILD_ICONS, lvTable: G_LV });
   pushFriends(p); markDirty();
 }
-const cleanPal = o => { const r = {}; for (const k of ['armor', 'trim', 'cloth', 'glow', 'hair', 'skin']) if (typeof o[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(o[k])) r[k] = o[k]; return r; };
+const cleanPal = o => { const r = {}; for (const k of ['armor', 'trim', 'cloth', 'glow', 'hair', 'skin']) if (typeof o[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(o[k])) r[k] = o[k]; if (o.v === 1 || o.v === 2) r.v = o.v; return r; };
 function dropConn(c) {
   if (c.p) { if (c.savePend) applySave(c); if (c.hubPend) applyHub(c); }
   if (!c.id || online.get(c.id) !== c) return; leaveRoom(c); leaveParty(c, 'offline'); online.delete(c.id); const p = c.p; p.lastSeen = now(); p.play += 0; markDirty();
   for (const f of p.friends) sendId(f, { t: 'presence', id: p.id, online: false });
 }
-const COOL = { chat: 600, friend: 400, party: 300, guild: 300, hubpub: 4000, lb: 500, profile: 150, ready: 500, sync: 1000, atlas: 250, setpw: 2000 };
+const COOL = { chat: 600, friend: 400, party: 300, guild: 300, hubpub: 4000, lb: 500, profile: 150, ready: 500, sync: 1000, atlas: 250, setpw: 2000, redeem: 1500 };
 const COOL_SCALE = process.env.COOL_SCALE != null ? +process.env.COOL_SCALE : 1; // tests set 0
 function bucket(c, k, rate, burst) { const b = (c.bk || (c.bk = {}))[k] || (c.bk[k] = { n: burst, t: now() }); const t = now(); b.n = Math.min(burst, b.n + (t - b.t) / 1000 * rate); b.t = t; if (b.n < 1) return false; b.n--; return true; }
 function limited(c, k) { const t = now(); c.cd = c.cd || {}; if (c.cd[k] && t - c.cd[k] < (COOL[k] || 0) * COOL_SCALE) return true; c.cd[k] = t; return false; }
@@ -431,7 +447,7 @@ function onMessage(c, raw) {
       const L = m.levels && typeof m.levels === 'object' ? m.levels : {}; for (const k of HEROES) if (L[k] != null) p.levels[k] = clamp(L[k] | 0, 1, 60);
       const PR = m.pres && typeof m.pres === 'object' ? m.pres : null; if (PR) { p.pres = p.pres || {}; for (const k of HEROES) if (PR[k] != null) p.pres[k] = clamp(PR[k] | 0, 0, 25); }
       const grow = (key, v, cap) => { v = clamp(v | 0, 0, 1e9); if (v > p[key] && v - p[key] <= cap) p[key] = v; else if (v > p[key]) p[key] += cap; };
-      if (m.kills != null) grow('kills', m.kills, 400); if (m.chapters != null) p.chapters = Math.max(p.chapters, clamp(m.chapters | 0, 0, 7)); if (m.bosses != null) grow('bosses', m.bosses, 3); markDirty(); return;
+      if (m.kills != null) grow('kills', m.kills, 400); if (m.chapters != null) p.chapters = Math.max(p.chapters, clamp(m.chapters | 0, 0, 14)); if (m.bosses != null) grow('bosses', m.bosses, 3); markDirty(); return;
     }
     case 'ev': { const k = cleanText(m.k, 10), n = clamp(m.n | 0, 1, 200); const ok = ['kill', 'chapter', 'boss', 'place', 'pchapter', 'smash'].includes(k); if (!ok) return; c.evb = c.evb || { t: now(), n: 0 }; if (now() - c.evb.t > 60000) c.evb = { t: now(), n: 0 }; if (c.evb.n + n > 400) return; c.evb.n += n; if (k === 'kill') p.kills += n; return questEvent(p, k, n); }
     case 'quests': return send(c, { t: 'quests', q: ensureQuests(p) });
@@ -440,6 +456,9 @@ function onMessage(c, raw) {
       const d = clamp(m.d | 0, -100000, 100000); if (!d) return pushStars(p); if (d > 0) addStars(p, d, m.why, true); else if (addStars(p, d, m.why) < 0) pushStars(p, 'denied'); return;
     }
     case 'devgrant': if (DEV_GRANT) addStars(p, clamp(m.n | 0, 1, 5000), 'devgrant', false); return;
+    case 'devbuy': if (DEV_GRANT && ITEMS[m.sku]) grantEnt(p, ITEMS[m.sku], 'purchase'); return;
+    case 'redeem': { if (limited(c, 'redeem')) return send(c, { t: 'redeemed', ok: false, error: 'Wait a moment and try again.' }); const e = redeem(p, m.code); return send(c, e ? { t: 'redeemed', ok: true, ent: e } : { t: 'redeemed', ok: false, error: 'That code is not valid.' }); }
+    case 'ent': return send(c, { t: 'ent', ent: entOf(p) });
     case 'hubpub': { // publish / update the player's hub (all their dungeon scenes) + the Atlas preview shot
       const sc = m.scenes; if (!Array.isArray(sc) || sc.length < 1 || sc.length > 6) return send(c, { t: 'notice', kind: 'bad', text: 'A hub needs 1–6 scenes.' });
       if (JSON.stringify(sc).length > 1500000) return send(c, { t: 'notice', kind: 'bad', text: 'Your hub is too large to publish.' });
@@ -480,6 +499,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
   if (req.url === '/' || req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json', ...cors }); return res.end(JSON.stringify({ ok: true, game: 'neon-codex', online: online.size, rooms: rooms.size, players: players.size, guilds: guilds.size, hubs: [...players.values()].filter(p => p.hub && p.hub.has && p.hub.public).length, persistent: PERSISTENT, volume: !!VOLUME })); }
   if (req.url.startsWith('/atlas')) return atlasHttp(req, res, cors);
+  if (req.url === '/redeem' || req.url === '/ent') return entHttp(req, res, cors);
   if (req.method === 'POST' && req.url === '/wix/credit') {
     let body = ''; req.on('data', d => { body += d; if (body.length > 20000) req.destroy(); });
     req.on('end', () => {
@@ -487,7 +507,10 @@ const server = http.createServer((req, res) => {
       if (!SECRET) return send(503, { ok: false, error: 'WIX_SHARED_SECRET not set' });
       if (!safeEq(hmac(body), req.headers['x-signature'] || '')) return send(401, { ok: false, error: 'bad signature' });
       let j; try { j = JSON.parse(body); } catch (e) { return send(400, { ok: false }); }
-      const member = cleanText(j.memberId, 64), order = cleanText(j.orderId, 80), stars = clamp(j.stars | 0, 1, 100000);
+      const member = cleanText(j.memberId, 64), order = cleanText(j.orderId, 80), item = ITEMS[j.sku] ? j.sku : null, stars = clamp(j.stars | 0, 1, 100000);
+      if (item && member && order) { if (misc.orders[order]) return send(200, { ok: true, duplicate: true }); misc.orders[order] = { member, sku: item, t: now() };
+        const p = [...players.values()].find(x => x.wix === member); if (p) grantEnt(p, ITEMS[item], 'purchase'); else (misc.pendingEnt[member] = misc.pendingEnt[member] || []).push(item);
+        markDirty(); return send(200, { ok: true, credited: !!p, sku: item }); }
       if (!member || !order || !stars) return send(400, { ok: false, error: 'memberId, orderId and stars are required' });
       if (misc.orders[order]) return send(200, { ok: true, duplicate: true });
       misc.orders[order] = { member, stars, t: now() };
@@ -499,6 +522,16 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(404, cors); res.end('not found');
 });
+/* entitlements over HTTP (Campaign mode has no websocket): GET /ent (x-token) · POST /redeem {code} (x-token optional – without it the unlock is only stored on that device) */
+const redeemHits = new Map();
+function entHttp(req, res, cors) { const out = (code, o) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors }); res.end(JSON.stringify(o)); };
+  const tok = req.headers['x-token'], p = typeof tok === 'string' && tok ? players.get(tokenIdx.get(sha(tok))) || null : null;
+  if (req.method === 'GET' && req.url === '/ent') return p ? out(200, { ok: true, ent: entOf(p) }) : out(401, { ok: false });
+  if (req.method !== 'POST' || req.url !== '/redeem') return out(404, { ok: false });
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '';
+  const h = redeemHits.get(ip) || { t: now(), n: 0 }; if (now() - h.t > 60000) { h.t = now(); h.n = 0; } h.n++; redeemHits.set(ip, h); if (redeemHits.size > 5000) redeemHits.clear(); if (h.n > 10) return out(429, { ok: false, error: 'Too many tries — wait a minute.' });
+  let body = ''; req.on('data', d => { body += d; if (body.length > 2000) req.destroy(); });
+  req.on('end', () => { let j = {}; try { j = JSON.parse(body || '{}'); } catch (e) { } const e = redeem(p, j.code); if (!e) return out(400, { ok: false, error: 'That code is not valid.' }); out(200, { ok: true, ent: e, account: !!p }); }); }
 /* Atlas over plain HTTP: lets Campaign mode (no account needed) browse and play the hubs; likes need the multiplayer login token (x-token) */
 const httpHits = new Map();
 function atlasHttp(req, res, cors) {

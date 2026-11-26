@@ -4088,7 +4088,7 @@ Object.assign(CHI.ch2,{fx:{fireflies:1,dust:0,mist:1,leaves:1,snow:0,ash:0}});Ob
 Object.assign(CHI.ch4,{fx:{fireflies:0,dust:0,mist:1,leaves:0,snow:1,ash:0,runes:1}});Object.assign(CHI.ch5,{fx:{fireflies:0,dust:1,mist:1,leaves:0,snow:0,ash:0,runes:1,void:1}});
 Object.assign(CHI.ch6,{fx:{fireflies:0,dust:1,mist:0,leaves:0,snow:0,ash:1,smoke:1}});Object.assign(CHI.ch7,{fx:{fireflies:0,dust:0,mist:1,leaves:0,snow:0,ash:0,runes:1,void:1,embers:1}});
 const chStars=T=>60+45*(T-1),chXP=T=>160+140*(T-1);
-const chUnlocked=C=>C.n===1||(PROG['ch'+(C.n-1)]&&PROG['ch'+(C.n-1)].done)||(PROG._cleared&&PROG._cleared['ch'+(C.n-1)])||(PROG[C.id]&&(PROG[C.id].i>0||PROG[C.id].done));
+const chUnlocked=C=>C.n===1||(C.n===8&&((PROG.ch3&&PROG.ch3.done)||(PROG._cleared&&PROG._cleared.ch3)))||(PROG['ch'+(C.n-1)]&&PROG['ch'+(C.n-1)].done)||(PROG._cleared&&PROG._cleared['ch'+(C.n-1)])||(PROG[C.id]&&(PROG[C.id].i>0||PROG[C.id].done));
 const chStatus=C=>{const p=PROG[C.id];if(p&&p.done)return'done';if(!chUnlocked(C))return'locked';const q=DB.scenes[C.id]&&DB.scenes[C.id].quest;if(p&&p.i>0)return'prog';return'new'};
 const isChapterPortal=o=>S&&S.id==='hub'&&o&&o.d&&CHI[o.d.target];
 const kindTh=id=>{try{return THUMB.img[id]||(THUMB.img[id]=thumbMake(id))}catch(e){return''}};
@@ -6488,7 +6488,7 @@ O.httpUrl=()=>O.url().replace(/^ws/,'http');
 const acct=()=>{try{return JSON.parse(ls('nca_acct')||'null')}catch(e){return null}};
 const setAcct=a=>ls('nca_acct',a?JSON.stringify(a):null);
 O.acct=acct;
-const myPal=()=>{try{return palFor(Hero.key)}catch(e){return{}}};
+const myPal=()=>{try{const p=palFor(Hero.key),v=Hero.pals&&Hero.pals[Hero.key]&&Hero.pals[Hero.key].v;if(v)p.v=v;return p}catch(e){return{}}};
 /* ---------------- connection ---------------- */
 let tries=0,rt=null,rtOn=false,name=null,wantName=null,closing=false;O.offlineChoice=false;O.t0=performance.now();
 O.start=function(){if(!O.mp()||O.on)return;O.on=true;
@@ -6507,7 +6507,7 @@ setInterval(()=>{if(O.mp()&&O.on)O.ensure(false)},4000);
 function connect(){clearTimeout(rt);rtOn=false;O.offlineChoice=false;const u=O.url();if(!u)return;O.status=tries?'reconnecting':'connecting';O.emit('status');
  let ws;try{ws=new WebSocket(u)}catch(e){O.status='offline';O.emit('status');return}
  O.ws=ws;ws.onopen=()=>{tries=0;hello();O.send({t:'ping',ts:performance.now()})};
- ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch(e){return}onMsg(m)};
+ ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch(e){return}onMsg(m);if(m&&typeof m.t==='string')try{O.emit('msg:'+m.t,m)}catch(e){}};
  ws.onclose=()=>{O.authed=false;O.host=null;O.emit('host',{id:null});clearRemotes();if(O.ws===ws)O.ws=null;if(closing)return;O.status=O.err?'denied':'offline';O.emit('status');if(O.err==='kicked')return;tries++;rtOn=true;rt=setTimeout(connect,Math.min(15000,1000*Math.pow(1.7,tries)))};
  ws.onerror=()=>{}}
 function hello(){const a=acct();const m={t:'hello',name:(a&&a.name)||name||wantName||'',hero:Hero.key,pal:myPal(),pr:typeof PRES!=='undefined'?PRES.of(Hero.key):0};if(a&&a.token)m.token=a.token;if(O.recovering)m.recover=true;if(O._pw){m.pw=O._pw;m.newpw=O._pw}if(O.wix&&O.wix.id)m.wix=O.wix;O.send(m)}
@@ -8562,6 +8562,547 @@ try{const A=TRAIN.A;
    H2.trial('loop','Time Loop','Survive: rewind out of trouble.',-40,24,[{k:'mutant',n:12,ring:7}],[24,36,54],{r:14})}}}catch(e){console.warn('[champs6] training',e)}
 
 return{KEYS,chill,setForm,setSong,ammo:()=>ammo(),walls:WALLS,bubbles:BUB,auras:()=>AUR,fire,iceWall,timeBubble,setBearVis}})();
+</script>
+<script id="nca-corinth">
+/* ============ BOOK II · THE RISE OF THE CORINTHIANS ============
+   Two premium champions, counterparts in design: LUCIA (androgynous seraph, holy-fire blade Excalibur, healing, flight)
+   and LUXIO (androgynous archfiend, red demon blade Ruinbrand, fire and destruction, flight).
+   Seven new chapters (Book II) in seven new arenas, built from new props and enemies born of the fracture between Heaven and Hell,
+   a login promotion, a premium store (bundle $10.99 with alternate designs, or $5.99 each) and a server-checked coupon field in the
+   Champions (H) menu. Damage goes through hitE / aoe / proj, so party play forwards hits to the host as usual. */
+const CORI=(()=>{
+const H=HUB,{B,Bx,Cy,Co,Sp,Oc,Tr,halo,lightAt}=H.prim,PI=Math.PI;
+const v3=(x,y,z)=>new THREE.Vector3(x||0,y||0,z||0);
+const HL=(m,c,s,x,y,z,op)=>{const h=halo(c,s,x,y,z,op);m.halos.push(h);return h};
+const KB=()=>{const K=KITS[Hero.key];return(K&&K.base)||Hero.key};
+const iam=k=>KB()===k;
+const AC=()=>typeof AKC!=='undefined'&&AKC;
+const gY=(x,z)=>RT.terr.H(x,z);
+const std=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.5,metalness:.2,flatShading:true},o||{}));
+const emi=(c,i)=>new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:i||1.2,roughness:.4,flatShading:true});
+const bas=(c,o)=>new THREE.MeshBasicMaterial(Object.assign({color:c},o||{}));
+const PREM=['lucia','luxio'];
+const HOLY=0xffc35a,HOLY2=0xfff0c0,HELL=0xff3a1a,HELL2=0xff8a2a,CORC=0xffb070;
+
+/* =====================================================================  PALETTES FOR THE NEW REALMS  */
+Object.assign(H.PALS,{
+ empyrean:{n:'Shattered Empyrean',acc:0xffd27a,acc2:0x9fe8ff,roof:0xe8e2d4,wall:0xa8a2b4,wood:0xb89a6a,stone:0x7e84a0,glow:0xfff2c0,sky:0x26346a},
+ abyss:{n:'Abyssal Forge',acc:0xff3a1a,acc2:0xff8a2a,roof:0x2a0e0e,wall:0x1e1012,wood:0x2a1610,stone:0x2e2024,glow:0xff6a2a,sky:0x140404},
+ schism:{n:'The Schism',acc:0xffc94a,acc2:0xff3a5a,roof:0x2a1e3a,wall:0x241c30,wood:0x2c2232,stone:0x3c3248,glow:0xffb070,sky:0x150a20}});
+
+/* =====================================================================  WINGS (champions + enemies)  */
+/* feathered wing: built pointing outward along +x, mirrored with scale.x for the other side */
+function featherWing(mF,mG,mB,s){const w=new THREE.Group(),arm=new THREE.Group();w.add(arm);
+ /* a solid fan behind the feathers so the wing reads as one shape from every angle */
+ const pts=[],P2=[[0,0],[.55,.18],[1.15,.36],[1.6,.2],[1.75,-.25],[1.45,-.75],[1.0,-1.0],[.5,-.85],[.12,-.45]];for(let i=1;i<P2.length-1;i++)pts.push(P2[0][0],P2[0][1],0,P2[i][0],P2[i][1],0,P2[i+1][0],P2[i+1][1],0);
+ const gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));gg.computeVertexNormals();const fm=mF.clone();fm.side=THREE.DoubleSide;const fan=new THREE.Mesh(gg,fm);fan.castShadow=true;arm.add(fan);
+ arm.add(B(Bx(.9,.08,.08),mB||mF,.45,.1,.02,0,0,.3),B(Bx(.7,.07,.07),mB||mF,1.2,.3,.02,0,0,-.15));
+ const fth=(bx,by,phi,L,wd)=>{const dx=Math.cos(phi),dy=Math.sin(phi);arm.add(B(Bx(wd,L,.03),mF,bx+dx*L/2,by+dy*L/2,.03,0,0,phi-PI/2),B(Bx(wd*.9,.13,.035),mG,bx+dx*L*.9,by+dy*L*.9,.035,0,0,phi-PI/2))};
+ for(let i=0;i<7;i++)fth(.25+i*.13,.1+i*.03,-1.62+i*.05,.55+i*.05,.19);
+ for(let i=0;i<5;i++)fth(1.05+i*.13,.33-i*.02,-1.15+i*.22,.7+i*.04,.2);
+ w.scale.setScalar(s||1);return w}
+/* membrane wing: bone fingers + scalloped membrane */
+function batWing(mM,mB,mG,s){const w=new THREE.Group();const tips=[[1.35,.55],[1.55,-.05],[1.25,-.6],[.75,-.85]],root=[0,0],el=[.55,.15];
+ w.add(B(Bx(.6,.08,.08),mB,.28,.07,0,0,0,.25));
+ for(const t of tips){const dx=t[0]-el[0],dy=t[1]-el[1],L=Math.hypot(dx,dy);w.add(B(Bx(L,.045,.05),mB,el[0]+dx/2,el[1]+dy/2,0,0,0,Math.atan2(dy,dx)))}
+ w.add(B(Co(.05,.22,4),mG,el[0],el[1]+.12,0));
+ const pts=[];const add=(a,b,c)=>pts.push(a[0],a[1],0,b[0],b[1],0,c[0],c[1],0);
+ const all=[root,el].concat(tips);add(root,el,tips[3]);for(let i=0;i<tips.length-1;i++){const a=tips[i],b=tips[i+1],m=[(a[0]+b[0])/2-.18,(a[1]+b[1])/2-.05];add(el,a,m);add(el,m,b)}
+ add(root,[.2,-.6],tips[3]);
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));g.computeVertexNormals();
+ const mm=mM.clone();mm.side=THREE.DoubleSide;const mem=new THREE.Mesh(g,mm);mem.castShadow=true;w.add(mem);
+ w.scale.setScalar(s||1);return w}
+/* attach a pair of wings behind a parent (chest / torso); returns the rig object the animator drives */
+function wingPair(parent,mk,y,z,spread){const W={L:new THREE.Group(),R:new THREE.Group(),k:0,spread:spread||1};
+ for(const[side,G]of[[1,W.L],[-1,W.R]]){G.position.set(side*.1,y,z);G.add(mk());G.scale.x=side;G.userData.side=side;parent.add(G)}
+ W.L.userData.anim=(o,t)=>wingPose(W,t);return W}
+function wingPose(W,t){const k=W.k,f=k>0?Math.sin(t*(7+4*k))*.55*k:Math.sin(t*1.6)*.05;
+ for(const G of[W.L,W.R]){const s=G.userData.side||1;G.rotation.y=s*((1-k)*1.15-.12*k);G.rotation.z=s*((1-k)*.25+k*(.2+f));G.rotation.x=.15*(1-k)}}
+
+/* =====================================================================  PROPS · the fracture of Heaven and Hell  */
+const pM={};
+function propM(){if(pM.ok)return pM;pM.ok=1;
+ pM.marble=std(0xe9e6f0,{roughness:.35,metalness:.05});pM.gold=std(0xffc94a,{metalness:.75,roughness:.28,emissive:0xaa6a00,emissiveIntensity:.35});
+ pM.holy=emi(0xffd98a,1.4);pM.sky=emi(0x9fe8ff,1.2);pM.feather=std(0xfff8ea,{roughness:.7,emissive:0xfff0d0,emissiveIntensity:.25});
+ pM.obs=std(0x16101a,{roughness:.25,metalness:.4});pM.lava=emi(0xff4a12,1.8);pM.ember=emi(0xff8a2a,1.3);pM.iron=std(0x3a3036,{metalness:.7,roughness:.4});
+ pM.crim=std(0x5a1414,{roughness:.6,emissive:0x3a0505,emissiveIntensity:.4});pM.bone=std(0xd9cdb5,{roughness:.8});pM.rift=emi(0xff3a5a,1.6);return pM}
+const C_=(x,z,r,h,y)=>['c',x,z,r,h,y||0],B_=(x,z,w,d,h,r,y)=>['b',x,z,w,d,h,r||0,y||0];
+const spin=(sp,bob)=>(o,t)=>{o.rotation.y=t*sp;if(bob)o.position.y=o.userData.y0+Math.sin(t*1.3+o.userData.y0)*bob};
+const P_={
+ halorun(M){const p=propM(),g=new THREE.Group();g.add(B(Cy(1.3,1.55,1.0,10),p.marble,0,.5,0),B(Cy(1.4,1.4,.12,10),p.gold,0,1.02,0),B(Cy(.9,1.1,.5,10),p.marble,0,1.3,0));
+  const r=new THREE.Group();r.position.y=3.3;r.userData.y0=3.3;g.add(r);for(let i=0;i<5;i++){const t=new THREE.Mesh(new THREE.TorusGeometry(1.6,.13,6,10,1.0),p.gold);t.rotation.z=i*1.25+.1;t.position.set(Math.cos(i*1.25+.6)*.12,Math.sin(i*1.25+.6)*.12,0);r.add(t)}
+  r.add(new THREE.Mesh(new THREE.TorusGeometry(1.25,.04,4,30),p.holy));r.rotation.x=.25;r.userData.anim=(o,t)=>{o.rotation.z=t*.25;o.position.y=3.3+Math.sin(t*1.1)*.18};
+  g.add(halo(0xffd98a,4,0,3.3,0,.45));lightAt(g,0xffd98a,3,12,0,3,0);return g},
+ seraphstat(M){const p=propM(),g=new THREE.Group();g.add(B(Bx(1.8,1,1.8),p.marble,0,.5,0),B(Bx(1.95,.12,1.95),p.gold,0,1.02,0),B(Cy(.32,.42,1.6,8),p.marble,0,1.9,0),B(Bx(.62,.7,.38),p.marble,0,2.95,0),B(Bx(.36,.36,.34),p.marble,0,3.5,0),
+   B(Bx(.07,2.1,.18),p.gold,.35,3.2,.2,0,0,-.1),B(Bx(.4,.06,.08),p.gold,.33,2.25,.2));
+  const t=new THREE.Mesh(new THREE.TorusGeometry(.32,.03,4,20),p.holy);t.position.set(0,3.95,0);t.rotation.x=PI/2;g.add(t);
+  for(const s of[1,-1]){const w=featherWing(p.marble,p.gold,p.marble,1.6);w.position.set(s*.2,3.1,-.22);w.scale.x*=s;w.rotation.y=-.3;w.rotation.z=.35;g.add(w)}return g},
+ marblecol(M){const p=propM(),g=new THREE.Group();g.add(B(Bx(1.5,.4,1.5),p.marble,0,.2,0),B(Cy(.55,.6,5,12),p.marble,0,2.9,0),B(Cy(.62,.62,.18,12),p.gold,0,.5,0),B(Cy(.62,.62,.18,12),p.gold,0,5.35,0),B(Bx(1.4,.4,1.4),p.marble,0,5.65,0));
+  for(let i=0;i<8;i++){const a=i*PI/4;g.add(B(Bx(.06,4.6,.06),p.gold,Math.cos(a)*.56,2.9,Math.sin(a)*.56))}
+  for(let i=0;i<3;i++){const h=halo(0xffffff,1.6,(i-1)*.6,5.9+i*.1,(i%2)*.3,.25);g.add(h)}return g},
+ feathers(M){const p=propM(),g=new THREE.Group();for(let i=0;i<14;i++){const a=Math.random()*6.28,r=Math.random()*1.6;const f=B(Bx(.09,.015,.45),i%4?p.feather:p.holy,Math.cos(a)*r,.03+Math.random()*.05,Math.sin(a)*r,0,Math.random()*6.28,0);g.add(f)}g.add(halo(0xfff0c0,1.4,0,.2,0,.35));return g},
+ pearlgate(M){const p=propM(),g=new THREE.Group();for(const x of[-2.4,2.4]){g.add(B(Cy(.55,.65,5.2,10),p.marble,x,2.6,0),B(Sp(.55,8),p.feather,x,5.4,0),B(Cy(.7,.7,.2,10),p.gold,x,.3,0))}
+  const a=new THREE.Mesh(new THREE.TorusGeometry(2.4,.28,6,12,PI*.55),p.marble);a.position.set(0,5.2,0);g.add(a);
+  const fa=new THREE.Mesh(new THREE.TorusGeometry(2.4,.28,6,12,PI*.4),p.marble);fa.position.set(1.4,.35,.9);fa.rotation.set(PI/2,0,.4);g.add(fa);g.add(B(Bx(4.2,.08,.08),p.holy,0,4.4,0));lightAt(g,0xfff0c0,2,10,0,4,0);return g},
+ hellspire(M){const p=propM(),g=new THREE.Group();const sp=[[0,0,1,4.6],[.8,.3,.6,2.6],[-.7,.5,.55,2.2],[.2,-.8,.5,1.8]];for(const[x,z,r,h]of sp){g.add(B(Co(r,h,5),p.obs,x,h/2,z,0,Math.random(),0));g.add(B(Co(r*.35,h*.85,4),p.lava,x+r*.25,h*.42,z+r*.25,0,0,.05))}
+  g.add(halo(0xff4a12,3,0,1.5,0,.4));lightAt(g,0xff4a12,2.5,9,0,1.5,0);return g},
+ brimpit(M){const p=propM(),g=new THREE.Group();g.add(B(Cy(1.3,.9,1.1,10),p.iron,0,.55,0),B(Cy(1.15,1.15,.08,10),p.lava,0,1.08,0),B(Tr(1.3,.1,4,12),p.iron,0,1.1,0,PI/2,0,0));for(let i=0;i<4;i++){const a=i*PI/2+.4;g.add(B(Bx(.18,.6,.18),p.iron,Math.cos(a)*1.25,.3,Math.sin(a)*1.25))}
+  const f=new THREE.Group();f.position.y=1.3;g.add(f);for(let i=0;i<4;i++){const h=halo(i%2?0xff8a2a:0xff3a1a,1.2,(Math.random()-.5)*1.2,.2+i*.25,(Math.random()-.5)*1.2,.75);f.add(h)}
+  f.userData.anim=(o,t)=>{o.children.forEach((h,i)=>{h.position.y=((t*.9+i*.25)%1.2);h.material.opacity=.8*(1-h.position.y/1.2)})};lightAt(g,0xff5a1e,3.5,11,0,1.6,0);return g},
+ chainpyl(M){const p=propM(),g=new THREE.Group();g.add(B(Bx(.7,4.2,.7),p.obs,0,2.1,0),B(Co(.5,.8,4),p.obs,0,4.6,0,0,PI/4,0),B(Bx(.74,.12,.74),p.iron,0,3.4,0),B(Oc(.22),p.lava,0,2.6,.37));
+  for(const s of[-1,1])for(let i=0;i<6;i++)g.add(B(Tr(.09,.025,4,8),p.iron,s*.45,3.3-i*.17,0,0,(i%2)*PI/2,0));g.add(halo(0xff4a12,1.4,0,2.6,.45,.6));return g},
+ hornarch(M){const p=propM(),g=new THREE.Group();for(const s of[-1,1]){let x=s*2.6,y=0;for(let i=0;i<8;i++){const a=i/8,r=.55*(1-a*.7);g.add(B(Cy(r*.85,r,.85,6),i%3===2?p.crim:p.bone,x,y+.42,0,0,0,-s*(a*1.6)));x-=s*Math.sin(a*1.6)*.75;y+=Math.cos(a*1.6)*.75}}
+  g.add(B(Oc(.35),p.lava,0,5.4,0));lightAt(g,0xff3a1a,2,10,0,5,0);return g},
+ riftscar(M){const p=propM(),g=new THREE.Group();const mk=(mat,side)=>{const pts=[];let y=0;const L=[];for(let i=0;i<=8;i++){y=i*.55;L.push([side*(.15+Math.random()*.35)*(1-Math.abs(i-4)/5),y])}
+   for(let i=0;i<8;i++){const a=L[i],b=L[i+1];pts.push(0,a[1],0,a[0],a[1],0,b[0],b[1],0,0,a[1],0,b[0],b[1],0,0,b[1],0)}const gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));gg.computeVertexNormals();
+   const m=new THREE.Mesh(gg,new THREE.MeshBasicMaterial({color:mat,side:THREE.DoubleSide,transparent:true,opacity:.9}));m.position.y=.4;return m};
+  g.add(mk(0xffd98a,1),mk(0xff3a3a,-1));g.add(B(Bx(.05,4.6,.05),bas(0xffffff),0,2.6,0));g.add(halo(0xffb070,4.5,0,2.6,0,.5));
+  for(let i=0;i<6;i++){const r=B(Oc(.12),i%2?p.holy:p.lava,(Math.random()-.5)*2,1+Math.random()*3,(Math.random()-.5)*1.5);r.userData.y0=r.position.y;r.userData.anim=spin(1.5,.25);g.add(r)}
+  g.children.forEach(c=>c.userData.noOutline=1);lightAt(g,0xffa070,3,12,0,2.5,0);return g},
+ corobelisk(M){const p=propM(),g=new THREE.Group();g.add(B(Bx(1.6,.5,1.6),p.obs,0,.25,0),B(Bx(.55,5.4,1),p.marble,-.28,3.2,0),B(Bx(.55,5.4,1),p.obs,.28,3.2,0),B(Co(.78,.9,4),p.gold,0,6.35,0,0,PI/4,0));
+  for(const[x,m]of[[-.28,p.holy],[.28,p.lava]])for(let i=0;i<4;i++)g.add(B(Bx(.2,.06,.02),m,x,1.8+i*.9,.51));
+  g.add(B(Tr(.35,.05,4,16),p.gold,0,4.8,.53),B(Oc(.15),pM.ember,0,4.8,.58));lightAt(g,0xffb070,2,9,0,4.8,.8);return g},
+ fallenwing(M){const p=propM(),g=new THREE.Group();const a=featherWing(p.feather,p.gold,p.marble,2.6);a.rotation.set(-PI/2+.15,0,.2);a.position.set(-1.2,.15,0);g.add(a);
+  const b=batWing(p.crim,p.bone,p.lava,2.2);b.rotation.set(-PI/2+.12,0,-.1);b.position.set(-1.1,.3,-.2);b.scale.x*=-1;g.add(b);for(let i=0;i<5;i++)g.add(halo(i%2?0xff6a2a:0xfff0c0,.9,(Math.random()-.5)*3,.3,(Math.random()-.5)*2,.4));return g},
+ emberbloom(M){const p=propM(),g=new THREE.Group();g.add(B(Cy(.08,.12,1.1,6),p.obs,0,.55,0));for(let i=0;i<6;i++){const a=i*PI/3;g.add(B(Oc(.24),i%2?p.holy:p.lava,Math.cos(a)*.3,1.25,Math.sin(a)*.3,a,0,.5))}g.add(B(Oc(.16),bas(0xffffff),0,1.3,0));g.add(halo(0xffb070,1.8,0,1.3,0,.6));lightAt(g,0xffb070,1.5,6,0,1.3,0);return g}};
+const PDEF=[['halorun','Shattered Halo','A fragment of Heaven’s great halo, still turning above its marble plinth.',[C_(0,0,1.45,1.6)]],['seraphstat','Seraph statue','A winged guardian of the Empyrean, carved in marble and gold.',[C_(0,0,1.0,4.4)]],
+ ['marblecol','Empyrean column','A fluted marble column banded in gold, wreathed in cloud.',[C_(0,0,.62,6)]],['feathers','Feather drift','Glowing feathers shed from the broken sky.',[]],['pearlgate','Broken Pearl Gate','What is left of a gate of Heaven.',[C_(-2.4,0,.65,5.6),C_(2.4,0,.65,5.6)]],
+ ['hellspire','Obsidian spire','Jagged obsidian veined with lava from the Abyssal Forge.',[C_(0,0,1.0,4.4)]],['brimpit','Brimstone cauldron','An iron cauldron of molten brimstone.',[C_(0,0,1.3,1.2)]],['chainpyl','Chain pylon','An obsidian pylon hung with the Forge’s chains.',[C_(0,0,.45,4.6)]],
+ ['hornarch','Horned arch','Two great horns curving into an arch over a burning eye.',[C_(-2.6,0,.6,3),C_(2.6,0,.6,3)]],['riftscar','Schism rift','A tear where Heaven and Hell bleed into each other: half gold light, half crimson fire.',[C_(0,0,.6,4)]],
+ ['corobelisk','Corinthian obelisk','Marble and obsidian in equal measure: the mark of the new beings.',[B_(0,0,1.6,1.6,6)]],['fallenwing','Fallen wing','A giant wing, half feathers and half burnt membrane.',[B_(-1.5,0,3.6,2.4,.6)]],['emberbloom','Corinthian bloom','A crystal flower that grows only where light and fire have met.',[C_(0,0,.35,1.5)]]];
+for(const[id,n,d,col]of PDEF)H.def(id,'Corinthians',n,d,M=>P_[id](M),{col});
+
+/* =====================================================================  ENEMIES  */
+const EM={};
+const eWings=(g,kind,s,y,z)=>{const R=g.userData.rig||{},tor=R.head&&R.head.parent?R.head.parent:(R.body||g);
+ const mF=std(kind==='bat'?0x4a1010:kind==='mix'?0xf2ead8:0xfff8ea,{emissive:kind==='bat'?0x2a0505:0xfff0d0,emissiveIntensity:.25}),mG=emi(kind==='bat'?0xff4a12:0xffd98a,1.3),mB=std(kind==='bat'?0x2a1a1a:0xe8d8b8);
+ const W=wingPair(tor,()=>kind==='bat'?batWing(mF,mB,mG,s):kind==='mix'?(()=>{const q=new THREE.Group();q.add(featherWing(mF,mG,mB,s));return q})():featherWing(mF,mG,mB,s),y,z);
+ if(kind==='mix'){const r=W.R.children[0];W.R.remove(r);W.R.add(batWing(std(0x4a1010,{emissive:0x2a0505,emissiveIntensity:.3}),mB,emi(0xff4a12,1.3),s))}
+ W.k=.6;W.L.userData.anim=(o,t)=>wingPose(W,t);try{H.outlineify(W.L);H.outlineify(W.R)}catch(e){}return W};
+const halo2=(g,col,s,y)=>{const R=g.userData.rig||{},hd=R.head||g;const t=new THREE.Mesh(new THREE.TorusGeometry(.26*(s||1),.03,4,20),emi(col,1.6));t.rotation.x=PI/2;t.position.y=(y||.5);t.userData.noOutline=1;hd.add(t);return t};
+const NE2={
+ seraphling:{n:'Seraphling',d:'A small winged angel of the shattered choir. Hovers at range and looses volleys of holy bolts.',mk:()=>{const g=H.mkBiped({col:0xf2ead8,col2:0xc9b78a,acc:0xffd98a,head:'box',wep:'bow',wlen:.9,bw:.5,bh:.58,leg:.8,hunch:.1,s:.95,eye:0x9fe8ff,glow:1.2});eWings(g,'feather',.75,.55,-.24);halo2(g,0xffd98a,1,.55);return g},
+  D:{hp:42,spd:3.6,r:.42,h:1.8,agr:24,leash:36,dmg:8,hc:0xffd98a,ai:'archer',lo:8,hi:14,draw:.75,rate:2.5,n:3,spread:.32,pspd:16,pcol:0xffe9a8,psize:.15}},
+ halowarden:{n:'Halo Warden',d:'An armoured angel knight. Its tower shield blocks 80% of damage from the front: flank it or break its guard.',mk:()=>{const g=H.mkBiped({col:0xd8d2c8,col2:0x8a7a52,acc:0xffc94a,head:'helm',bw:.86,bh:.86,pads:2,wep:'sword',wlen:1.25,shield:1,hunch:.08,s:1.18,hs:.4,eye:0x9fe8ff});eWings(g,'feather',.95,.7,-.3);halo2(g,0xffd98a,1.2,.62);return g},
+  D:{hp:220,spd:2.2,r:.8,h:2.6,agr:16,leash:30,dmg:15,arm:40,hc:0xffc94a,ai:'melee',sh:1,heavy:1,reach:1.8,wind:.75,rec:1.3,hit:1.9,kb:9}},
+ choir:{n:'Choir Wisp',d:'A floating cherub of light that heals and wards the angels around it. Kill it first.',mk:()=>{const g=H.mkBiped({col:0xfff4dc,col2:0xd9c48a,acc:0xfff0a0,head:'hood',wep:'staff',wlen:.9,robe:1,hover:1.4,bw:.46,bh:.56,hs:.36,glow:2.2,eye:0xfff0a0,s:1.0});eWings(g,'feather',.6,.45,-.2);halo2(g,0xfff0a0,1,.5);return g},
+  D:{hp:62,spd:3.0,r:.4,h:2.2,agr:24,leash:36,dmg:7,hc:0xfff0a0,fly:1,ai:'mender',lo:8,hi:13,rate:2.6,heal:.22,healCd:4.5,ward:3}},
+ imp:{n:'Ember Imp',d:'A cackling little demon on cinder wings. Circles you, then darts in for a burning double-slash.',mk:()=>{const g=H.mkBiped({col:0x7a1a14,col2:0x3a0c0a,acc:0xff6a2a,head:'box',leg:.62,bw:.48,bh:.5,arm:.7,aw:.13,claws:1,hunch:.45,horns:1,s:.8,hs:.36,eye:0xffd24a,glow:1.2});eWings(g,'bat',.55,.42,-.2);return g},
+  D:{hp:36,spd:6,r:.4,h:1.3,agr:19,leash:32,dmg:8,hc:0xff6a2a,ai:'fast',dash:13,dashT:.26,tele:.3,reach:.95,cdA:1.0,ring:4.5,dashR:8}},
+ hellhound:{n:'Hellhound',d:'A hound of the Abyss with a burning mane. Lowers its head and charges in a long straight line.',mk:()=>{const g=H.mkBeast({col:0x3a1410,col2:0x1e0a08,acc:0xff4a12,kind:'cat',s:1.2,mane:1,horns:1,bl:1.35,bh:.6,leg:.66});return g},
+  D:{hp:120,spd:3.8,r:.75,h:1.5,agr:20,leash:34,dmg:15,arm:10,hc:0xff4a12,ai:'charger',cmin:4.5,cmax:16,cspd:16,ctele:.6,cdur:.8,cmul:1.35,stunW:1.4,cdC:2.4,kb:12}},
+ brimbrute:{n:'Brimstone Brute',d:'A horned demon of the Forge, slow and enormous. Every third swing shakes the ground.',mk:()=>{const g=H.mkBiped({col:0x4a1a16,col2:0x2a0e0c,acc:0xff5a1e,head:'box',bw:1.05,bh:.95,bd:.65,leg:.95,arm:1.05,aw:.34,lw:.36,pads:2,fat:1,horns:2,spikes:4,s:1.45,hs:.45,hunch:.18,glow:3,eye:0xffb04a});return g},
+  D:{hp:340,spd:1.9,r:1.2,h:3.6,agr:15,leash:28,dmg:22,arm:45,hc:0xff5a1e,ai:'melee',heavy:1,slam:1,reach:2.3,wind:.9,rec:1.8,hit:2.6,kb:12}},
+ cinderwitch:{n:'Cinder Witch',d:'A demon caster who lobs gobs of molten brimstone that burst on impact.',mk:()=>{const g=H.mkBiped({col:0x3a1020,col2:0x1e0812,acc:0xff3a5a,head:'hood',wep:'staff',wlen:1.0,robe:1,bw:.52,bh:.6,hs:.36,horns:1,glow:1.8,eye:0xff6a2a,s:1.05});return g},
+  D:{hp:64,spd:2.8,r:.5,h:2.1,agr:22,leash:34,dmg:12,hc:0xff3a5a,ai:'spitter',lo:7,hi:13,rate:2.4,pspd:12,pcol:0xff6a2a,psize:.3,boom:2.4,grav:16}},
+ hatchling:{n:'Corinthian Hatchling',d:'A newborn of the fracture: one wing of feathers, one of ember. Crouches, then leaps on you.',mk:()=>{const g=H.mkBiped({col:0xe8dcc8,col2:0x7a2a24,acc:0xffb070,leg:1.05,lw:.17,bh:.56,bw:.52,arm:.95,aw:.13,claws:1,hunch:.45,s:.92,hs:.36,eye:0xffb070});eWings(g,'mix',.5,.42,-.2);return g},
+  D:{hp:64,spd:3.9,r:.48,h:1.7,agr:20,leash:34,dmg:12,hc:0xffb070,ai:'jumper',jr:12,jmin:3.6,land:2.2,jt:.6,crouch:.5,cdJ:2.3,kb:8}},
+ paragon:{n:'Corinthian Paragon',d:'A knight of the new beings, armoured in marble and obsidian. Levels its blade and charges.',mk:()=>{const g=H.mkBiped({col:0xd8d0c4,col2:0x1e1620,acc:0xffb070,head:'helm',bw:.82,bh:.84,pads:2,wep:'sword',wlen:1.35,hunch:.12,s:1.2,hs:.4,eye:0xffb070,cape:1});eWings(g,'mix',.9,.7,-.3);return g},
+  D:{hp:190,spd:3.2,r:.8,h:2.6,agr:20,leash:34,dmg:17,arm:22,hc:0xffb070,ai:'charger',heavy:1,cmin:5,cmax:17,cspd:16,ctele:.7,cdur:.85,cmul:1.4,stunW:1.6,cdC:2.4,kb:13}},
+ chorister:{n:'Corinthian Chorister',d:'Sings in two voices at once and calls hatchlings out of the rift.',mk:()=>{const g=H.mkBiped({col:0xf0e8dc,col2:0x2a1a24,acc:0xff9a5a,head:'hood',wep:'staff',wlen:1.05,robe:1,bw:.54,bh:.62,hs:.36,glow:2,eye:0xffb070,s:1.08});eWings(g,'mix',.7,.5,-.24);halo2(g,0xffb070,1,.5);return g},
+  D:{hp:92,spd:2.6,r:.5,h:2.3,agr:24,leash:36,dmg:9,hc:0xff9a5a,ai:'summoner',lo:8,hi:14,rate:2.4,sumCd:10,sumN:2,cap:4,pspd:11,pcol:0xffb070,psize:.2}}};
+/* bosses: one per chapter */
+const BOSSD={
+ ophanel:{n:'Ophanel, the Wheel of Eyes',d:'Boss. A burning wheel of eyes that once turned Heaven’s halo. Rains holy fire and blinks across the arena.',mk:()=>{const g=H.mkBiped({col:0xf4ead2,col2:0xb89a5a,acc:0xffd98a,head:'hood',wep:'staff',wlen:1.4,robe:1,hover:1.8,bw:.8,bh:.8,hs:.46,crown:1,glow:5,eye:0x9fe8ff,s:1.6});
+   const R=g.userData.rig;const w=new THREE.Group();w.position.set(0,.9,-.3);(R.head.parent).add(w);const mt=emi(0xffd98a,1.5);w.add(new THREE.Mesh(new THREE.TorusGeometry(1.25,.08,6,32),mt));for(let i=0;i<10;i++){const a=i*PI/5,e=new THREE.Group();e.position.set(Math.cos(a)*1.25,Math.sin(a)*1.25,0);e.add(B(Sp(.13,6),bas(0xffffff),0,0,0),B(Sp(.07,6),bas(0x2a6aff),0,0,.09));w.add(e)}
+   w.userData.anim=(o,t)=>{o.rotation.z=t*.6};eWings(g,'feather',1.2,.7,-.3);return g},
+  D:{hp:700,spd:3.0,r:1.1,h:4.4,agr:32,leash:90,dmg:20,arm:20,hc:0xffd98a,boss:1,fly:1,ai:'boss',name:'OPHANEL, THE WHEEL OF EYES',sub:'It turned the halo of Heaven',moves:[['fan',3,{maxD:20}],['rain',2],['blink',2,{cd:7}],['nova',1,{hp:.45,cd:12}]]}},
+ malgrath:{n:'Malgrath, Warden of Cinders',d:'Boss. A towering horned demon who claimed the empty Ember Throne. Vaults across the arena and rains slag.',mk:()=>{const g=H.mkBiped({col:0x4a1612,col2:0x22080a,acc:0xff4a12,head:'box',bw:1.35,bh:1.15,bd:.85,leg:1.15,arm:1.35,aw:.48,lw:.52,pads:2,fat:1,horns:2.4,spikes:6,s:1.9,hs:.55,hunch:.2,glow:6,eye:0xffb04a,crown:1});eWings(g,'bat',1.5,.8,-.4);return g},
+  D:{hp:1000,spd:2.4,r:1.8,h:5.4,agr:32,leash:90,dmg:30,arm:45,hc:0xff4a12,boss:1,heavy:1,ai:'boss',name:'MALGRATH, WARDEN OF CINDERS',sub:'He sits on a throne that is not his',moves:[['slam',3],['leap',2,{minD:6,cd:6}],['rain',2],['charge',1,{minD:8}],['nova',1,{hp:.45,cd:11}]]}},
+ twinecho:{n:'The Twin Echo',d:'Boss. A shade made of the fury of both blades: half seraph, half fiend. Blinks behind you and cuts in flurries.',mk:()=>{const g=H.mkBiped({col:0xe8dcc8,col2:0x3a0c10,acc:0xffb070,head:'hood',wep:'sword',wlen:1.4,bw:.62,bh:.72,leg:1.0,aw:.16,hunch:.25,cape:2,s:1.5,hs:.4,glow:3,eye:0xffb070});eWings(g,'mix',1.1,.7,-.3);return g},
+  D:{hp:620,spd:4.6,r:.9,h:3.3,agr:30,leash:90,dmg:21,arm:15,hc:0xffb070,boss:1,ai:'boss',name:'THE TWIN ECHO',sub:'Two blades, one grudge',moves:[['flurry',3],['blinkstrike',3,{cd:5}],['knives',2,{minD:5}],['nova',1,{hp:.4,cd:12}]]}},
+ ashseraph:{n:'The Cindershroud Seraph',d:'Boss. An angel of the Ashen Cloister who burned and did not die. Guards the hatchling nests with fan-fire and its brood.',mk:()=>{const g=H.mkBiped({col:0x5a4a44,col2:0x2a1e1a,acc:0xff8a2a,head:'hood',wep:'staff',wlen:1.5,robe:1,hover:1.7,bw:.82,bh:.82,hs:.46,crown:1,glow:5,eye:0xff8a2a,s:1.6,cape:1});eWings(g,'feather',1.3,.7,-.32);halo2(g,0xff8a2a,1.6,.62);return g},
+  D:{hp:760,spd:3.0,r:1.1,h:4.4,agr:32,leash:90,dmg:22,arm:22,hc:0xff8a2a,boss:1,fly:1,ai:'boss',name:'THE CINDERSHROUD SERAPH',sub:'Burned, and did not die',moves:[['fan',3,{maxD:20}],['rain',2],['blink',2,{cd:7}],['brood',1,{hp:.7,cd:16}],['nova',1,{hp:.4,cd:12}]]}},
+ baelith:{n:'Baelith the Haloed',d:'Boss. A demon lord crowned with a halo of stolen light. Shield wall, charges and a war-cry that calls guards.',mk:()=>{const g=H.mkBiped({col:0x3a1418,col2:0x1a0a0c,acc:0xffd24a,head:'helm',bw:1.15,bh:1.05,pads:2,wep:'sword',wlen:1.5,shield:1,horns:2,s:1.8,hs:.5,hunch:.1,glow:4,eye:0xffd24a,cape:2});eWings(g,'bat',1.3,.8,-.36);halo2(g,0xffd98a,1.7,.7);return g},
+  D:{hp:900,spd:2.8,r:1.4,h:4.8,agr:32,leash:90,dmg:26,arm:40,hc:0xffd24a,boss:1,sh:1,ai:'boss',name:'BAELITH THE HALOED',sub:'He stole a crown of Heaven',moves:[['slam',3],['charge',2,{minD:7}],['bash',2,{maxD:5}],['rally',1,{hp:.6,cd:22}],['nova',1,{hp:.35,cd:12}]]}},
+ seraxis:{n:'Paragon Seraxis',d:'Boss. Champion of the Corinthians, with a blade forged of light and fire. Tests you with flurries, leaps and blink-strikes.',mk:()=>{const g=H.mkBiped({col:0xe0d6c8,col2:0x1e1620,acc:0xffb070,head:'helm',wep:'sword',wlen:1.5,bw:.75,bh:.8,leg:1.05,pads:2,hunch:.15,cape:2,s:1.6,hs:.42,glow:3.5,eye:0xffb070});eWings(g,'mix',1.25,.75,-.32);halo2(g,0xffb070,1.3,.62);return g},
+  D:{hp:820,spd:4.0,r:1.0,h:3.6,agr:32,leash:90,dmg:22,arm:25,hc:0xffb070,boss:1,ai:'boss',name:'PARAGON SERAXIS',sub:'The Corinthians’ chosen blade',moves:[['flurry',3],['leap',2,{minD:6,cd:6}],['blinkstrike',2,{cd:6}],['brood',1,{hp:.65,cd:18}],['nova',1,{hp:.4,cd:11}]]}},
+ corinth:{n:'Corinth, the First of the New',d:'Final boss of Book II. Born the moment Excalibur and Ruinbrand first met. Neither good nor evil: simply new, and very powerful.',mk:()=>{const g=H.mkBiped({col:0xf0e6d8,col2:0x1a1018,acc:0xffb070,head:'skull',wep:'scythe',wlen:1.6,robe:1,hover:2.1,bw:1.0,bh:.95,hs:.52,crown:1,horns:1.4,glow:7,eye:0xffb070,s:2.0,cape:2,pads:1});eWings(g,'mix',1.7,.85,-.4);halo2(g,0xffb070,2,.75);return g},
+  D:{hp:1600,spd:3.4,r:1.3,h:5.2,agr:34,leash:100,dmg:30,arm:30,hc:0xffb070,boss:1,fly:1,ai:'boss',name:'CORINTH, THE FIRST OF THE NEW',sub:'Neither light nor fire',moves:[['fan',2,{maxD:22}],['rain',2],['blink',2,{cd:6}],['knives',1,{minD:6}],['brood',1,{hp:.75,cd:16}],['nova',2,{hp:.5,cd:9}]]}}};
+for(const[k,n]of Object.entries(Object.assign({},NE2,BOSSD))){const boss=!!BOSSD[k];H.NE[k]={n:n.n,d:n.d,mk:n.mk,D:n.D,boss};EDEF[k]=Object.assign({},n.D);H.ENB[k]=M=>n.mk();H.def(k,'Creatures',n.n,n.d,H.ENB[k],{});(boss?H.BOSS_KINDS:H.ENEMY_KINDS).push(k)}
+
+/* =====================================================================  CHAMPIONS · LUCIA & LUXIO  */
+H.CHK.push(...PREM);
+Object.assign(H.CHP,{lucia:{armor:0xf4ecd8,trim:0xffc94a,cloth:0xe6e0f0,glow:0xffb347,hair:0xf3d27a,skin:0xe8c8b0},luxio:{armor:0x4a141a,trim:0xff4a2a,cloth:0x1a0a0c,glow:0xff2a1a,hair:0x1a1014,skin:0xc89a8a}});
+Object.assign(H.HGT2,{lucia:1.92,luxio:1.92});
+const SKINS={lucia:[{n:'Dawnbreaker',w:'Excalibur',pal:{armor:'#f4ecd8',trim:'#ffc94a',cloth:'#e6e0f0',glow:'#ffb347',hair:'#f3d27a',skin:'#e8c8b0'}},{n:'Eclipse Seraph',w:'Caliburn Nova',prem:1,pal:{armor:'#c8d4ea',trim:'#9fd8ff',cloth:'#2a3a6a',glow:'#8fd8ff',hair:'#e8f0ff',skin:'#dcc0b0'}}],
+ luxio:[{n:'Hellbrand',w:'Ruinbrand',pal:{armor:'#4a141a',trim:'#ff4a2a',cloth:'#1a0a0c',glow:'#ff2a1a',hair:'#1a1014',skin:'#c89a8a'}},{n:'Ashen Tyrant',w:'Oblivion Fang',prem:1,pal:{armor:'#26222c',trim:'#b36bff',cloth:'#120e18',glow:'#c04aff',hair:'#d8d0e0',skin:'#b8a8b0'}}]};
+function setVar(R,v){if(!R||!R.vars||R._v===v)return;R._v=v;R.vars.forEach((L,i)=>L.forEach(o=>o.visible=i===v));const t=R.tips&&R.tips[v];if(t)R.tip=t}
+const curV=k=>{try{return(Hero.pals[k]&&Hero.pals[k].v)|0}catch(e){return 0}};
+function excalibur(m){const g=new THREE.Group();g.position.y=-.05;
+ g.add(B(Bx(.05,.11,1.15),m.steel,0,0,.82),B(Bx(.06,.035,1.1),m.glow,0,.055,.8),B(Bx(.06,.035,1.1),m.glow,0,-.055,.8),B(Co(.08,.24,4),m.steel,0,0,1.5,PI/2,PI/4,0),
+  B(Bx(.42,.06,.08),m.trim,0,0,.22),B(Cy(.03,.03,.22,6),m.dark,0,0,.08,PI/2,0,0),B(Oc(.06),m.glow,0,0,.22),B(Sp(.045,6),m.trim,0,0,-.05));
+ for(const s of[-1,1])g.add(B(Bx(.22,.03,.06),m.trim,s*.27,0,.27,0,s*.5,0),B(Bx(.16,.03,.05),m.trim,s*.3,0,.33,0,s*.9,0));
+ for(let i=0;i<4;i++){const h=HL(m,0xffb347,.32,0,0,.5+i*.3,.5);g.add(h)}g.userData.tip=H.addTip(g,1.55);return g}
+function caliburn(m){const g=new THREE.Group();g.position.y=-.05;g.add(B(Bx(.04,.14,1.2),m.glow,0,0,.85),B(Bx(.07,.07,.9),bas(0xffffff),0,0,.78),B(Co(.07,.22,4),m.glow,0,.05,1.52,PI/2,0,0),B(Co(.07,.22,4),m.glow,0,-.05,1.52,PI/2,0,0),
+  B(Tr(.12,.02,4,14),m.trim,0,0,.24),B(Cy(.03,.03,.22,6),m.dark,0,0,.08,PI/2,0,0),B(Oc(.07),m.glow,0,0,.24));g.add(HL(m,0x8fd8ff,.9,0,0,.9,.45));g.userData.tip=H.addTip(g,1.6);return g}
+function ruinbrand(m){const g=new THREE.Group();g.position.y=-.05;g.add(B(Bx(.06,.15,1.1),m.armor,0,0,.78),B(Bx(.07,.05,1.0),m.glow,0,0,.76),B(Co(.1,.3,4),m.armor,0,0,1.45,PI/2,PI/4,0));
+ for(let i=0;i<5;i++)g.add(B(Co(.035,.12,3),m.trim,0,.1,.4+i*.2,-.6,0,0));
+ g.add(B(Bx(.36,.08,.1),m.dark,0,0,.22),B(Co(.04,.18,4),m.trim,.2,0,.28,0,0,-1.2),B(Co(.04,.18,4),m.trim,-.2,0,.28,0,0,1.2),B(Cy(.035,.035,.24,6),m.dark,0,0,.08,PI/2,0,0),B(Oc(.06),m.glow,0,0,-.06));
+ for(let i=0;i<3;i++)g.add(HL(m,0xff2a1a,.35,0,0,.5+i*.35,.55));g.userData.tip=H.addTip(g,1.5);return g}
+function oblivion(m){const g=new THREE.Group();g.position.y=-.05;let x=0,z=.25;for(let i=0;i<6;i++){const a=i*.12;g.add(B(Bx(.05,.16,.26),m.armor,x,0,z,0,a,0),B(Bx(.06,.05,.24),m.glow,x,0,z,0,a,0));x+=Math.sin(a)*.24;z+=Math.cos(a)*.24}
+ g.add(B(Co(.08,.3,4),m.glow,x+.08,0,z+.05,PI/2,0,-.8),B(Bx(.3,.08,.1),m.dark,0,0,.18),B(Cy(.035,.035,.24,6),m.dark,0,0,.05,PI/2,0,0));g.add(HL(m,0xc04aff,.9,x*.5,0,z*.6,.45));g.userData.tip=tip3(g,x+.1,0,z+.1);return g}
+function tip3(g,x,y,z){const t=new THREE.Object3D();t.position.set(x,y,z);g.add(t);return t}
+function mkLucia(m){const R=H.humanoid(m,{tw:.48,th:.52,hs:.34,hw:.18,sw:.31,am:m.armor,fm:m.armor,gm:m.trim,brc:m.trim,lm:m.cloth,sm:m.armor,bm:m.trim,btr:m.glow,tm:m.armor,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
+ body.add(B(Cy(.22,.42,.7,10),m.cloth,0,-.3,0),B(Cy(.43,.43,.04,10),m.trim,0,-.64,0),B(Bx(.18,.66,.04),m.armor,0,-.3,.26,.12,0,0),B(Bx(.04,.62,.05),m.trim,0,-.3,.29,.12,0,0));
+ chest.add(B(Bx(.52,.36,.44),m.armor,0,.32,0),B(Cy(.11,.11,.04,12),m.trim,0,.36,.22,PI/2,0,0),B(Oc(.06),m.glow,0,.36,.25),B(Bx(.6,.06,.46),m.trim,0,.52,0));
+ for(let i=0;i<8;i++){const a=i*PI/4;chest.add(B(Bx(.016,.08,.02),m.trim,Math.cos(a)*.15,.36+Math.sin(a)*.15,.225,0,0,a))}
+ for(const s of[-1,1]){const sh=R[s<0?'shR':'shL'];sh.add(B(Sp(.17,7),m.armor,s*.03,.02,0),B(Bx(.24,.05,.24),m.trim,s*.03,.12,0,0,0,-s*.3))}
+ head.add(B(Bx(.36,.13,.36),m.hair,0,.38,-.01),B(Bx(.36,.6,.1),m.hair,0,.1,-.17),B(Bx(.07,.4,.08),m.hair,.165,.13,.08),B(Bx(.07,.4,.08),m.hair,-.165,.13,.08),B(Bx(.37,.035,.37),m.trim,0,.33,0),B(Bx(.075,.04,.02),m.glow,.085,.2,.172),B(Bx(.075,.04,.02),m.glow,-.085,.2,.172));
+ const hg=new THREE.Group();hg.position.y=.62;head.add(hg);const h1=new THREE.Mesh(new THREE.TorusGeometry(.24,.025,4,24),m.glow);h1.rotation.x=PI/2;hg.add(h1);const h2=new THREE.Mesh(new THREE.TorusGeometry(.31,.015,4,24),m.trim);h2.rotation.x=PI/2;hg.add(h2);h2.visible=false;
+ hg.add(HL(m,0xffc94a,.7,0,0,0,.35));hg.userData.anim=(o,t)=>{o.position.y=.62+Math.sin(t*2)*.02;o.rotation.y=t*.6};
+ const wM=m.armor,wG=m.glow,wB=m.trim;R.wings=wingPair(chest,()=>featherWing(wM,wG,wB,.82),.46,-.24);
+ const ex=excalibur(m),cb=caliburn(m);R.handR.add(ex,cb);R.weapon=ex;R.vars=[[ex],[cb,h2]];R.tips=[ex.userData.tip,cb.userData.tip];R.tip=ex.userData.tip;cb.visible=false;R._v=0;
+ return H.cmFinish(R,m,G)}
+function mkLuxio(m){const R=H.humanoid(m,{tw:.48,th:.52,hs:.34,hw:.18,sw:.31,am:m.armor,fm:m.armor,gm:m.dark,brc:m.trim,lm:m.cloth,sm:m.armor,bm:m.dark,btr:m.trim,tm:m.armor,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
+ body.add(B(Bx(.48,.42,.36),m.cloth,0,-.18,0),B(Bx(.18,.6,.04),m.armor,.12,-.32,.2,.1,0,.08),B(Bx(.18,.6,.04),m.armor,-.12,-.32,.2,.1,0,-.08),B(Bx(.5,.05,.38),m.trim,0,-.02,0));
+ chest.add(B(Bx(.52,.36,.44),m.armor,0,.32,0),B(Oc(.07),m.glow,0,.36,.24),B(Bx(.08,.32,.05),m.trim,0,.3,.225),B(Bx(.6,.06,.46),m.trim,0,.52,0));
+ for(const s of[-1,1]){const sh=R[s<0?'shR':'shL'];sh.add(B(Sp(.18,6),m.armor,s*.03,.02,0));for(let i=0;i<3;i++)sh.add(B(Co(.04,.2,4),m.trim,s*(.06+i*.06),.16,-.04+i*.03,0,0,-s*(.3+i*.15)))}
+ head.add(B(Bx(.36,.13,.36),m.hair,0,.38,-.01),B(Bx(.36,.46,.1),m.hair,0,.14,-.17),B(Bx(.07,.3,.08),m.hair,.165,.17,.08),B(Bx(.07,.3,.08),m.hair,-.165,.17,.08),B(Bx(.075,.04,.02),m.glow,.085,.2,.172),B(Bx(.075,.04,.02),m.glow,-.085,.2,.172));
+ const hornsA=[],hornsB=[];for(const s of[-1,1]){let x=s*.13,y=.4,z=0;for(let i=0;i<5;i++){const r=.055*(1-i*.15);const o=B(Cy(r*.7,r,.14,5),i>2?m.trim:m.dark,x,y,z,-.5,0,-s*(.35+i*.18));head.add(o);hornsA.push(o);x+=s*.05;y+=.1;z-=.05}
+  let x2=s*.13,y2=.38,z2=0;for(let i=0;i<7;i++){const r=.06*(1-i*.11);const o=B(Cy(r*.7,r,.15,5),i>4?m.glow:m.dark,x2,y2,z2,-.2,0,-s*(.7+i*.12));head.add(o);hornsB.push(o);o.visible=false;x2+=s*.09;y2+=.08;z2-=.03}}
+ const tail=new THREE.Group();tail.position.set(0,-.05,-.2);body.add(tail);let p=tail;for(let i=0;i<6;i++){const s=new THREE.Group();s.position.set(0,i?-.14:0,i?-.04:0);s.rotation.x=.35;p.add(s);s.add(B(Cy(.03*(1-i*.1),.035*(1-i*.1),.16,5),m.dark,0,-.08,0));p=s}p.add(B(Co(.06,.16,4),m.trim,0,-.2,0,PI,0,0));
+ tail.userData.anim=(o,t)=>{let c=o,i=0;while(c&&c.children&&c.children.length){c.rotation.z=Math.sin(t*2+i*.6)*.18;c=c.children.find(q=>q.isGroup);i++}};
+ R.wings=wingPair(chest,()=>batWing(m.armor,m.dark,m.glow,.95),.46,-.24);
+ const rb=ruinbrand(m),ob=oblivion(m);R.handR.add(rb,ob);R.weapon=rb;R.vars=[[rb].concat(hornsA),[ob].concat(hornsB)];R.tips=[rb.userData.tip,ob.userData.tip];R.tip=rb.userData.tip;ob.visible=false;R._v=0;
+ return H.cmFinish(R,m,G)}
+Object.assign(H.CHBUILD,{lucia:mkLucia,luxio:mkLuxio});
+const STL={lucia:{Rx:-.55,re:-.95,Rz:.12,wx:.4,Lx:-.3,le:-.7,Lz:.35,rk:.08,lk:.08,cy:-.1},luxio:{Rx:-.45,re:-.8,Rz:.18,wx:.55,Lx:-.4,le:-1.0,Lz:.3,rk:.14,lk:.14,cy:-.18,cx:.06,rl:-.1,ll:.08}};
+const STFLY={Rx:-.4,re:-.5,Rz:.45,wx:.3,Lx:-.3,le:-.4,Lz:.55,rk:.6,lk:.9,rl:.25,ll:-.1,bx:.15,h:.02};
+for(const k of PREM)H.STANCE[k]=Object.assign({},STL[k]);
+Object.assign(H.LOCO,{lucia:{leg:.9,arm:.35,lean:.12,bob:.04},luxio:{leg:.92,arm:.38,lean:.15,bob:.05}});
+const K_=(...a)=>({k:a});
+const CLA={skycast:K_([0,{}],[.25,{Rx:-1.9,re:-.3,wx:1.2,Lx:-1.6,le:-.5,cx:.25,hx:.25}],[.45,{Rx:-1.3,re:0,wx:1.6,Lx:-1.2,le:-.2,cx:.35,hx:.3},'i'],[.8,{Rx:-1.3,re:0,wx:1.6,Lx:-1.2,le:-.2,cx:.35}],[1,{}]),
+ dive:K_([0,{}],[.2,{Rx:-2.9,re:-.3,wx:.4,Lx:-2.6,le:-.4,bx:-.3,rk:.8,lk:.8}],[.6,{Rx:-.8,re:-.1,wx:.6,Lx:-.9,le:-.3,bx:.7,cx:.4,h:-.25,rk:.5,lk:.5},'i'],[.85,{Rx:-.8,re:-.1,wx:.6,bx:.7,cx:.4,h:-.25}],[1,{}]),
+ ascend:K_([0,{}],[.3,{Rx:-2.6,re:-.2,Lx:-2.6,le:-.2,Rz:.6,Lz:.6,h:-.2,rk:.8,lk:.8}],[.7,{Rx:-.5,Lx:-.5,Rz:1.2,Lz:1.2,h:.05,rl:.3,ll:-.2}],[1,{}]),
+ judgement:K_([0,{}],[.35,{Rx:-3.0,re:-.2,wx:.3,Lx:-3.0,le:-.3,cx:-.35,h:.02}],[.55,{Rx:-1.4,re:0,wx:1.5,Lx:-1.3,le:-.1,cx:.5,bx:.15,h:-.12,rl:-.5,ll:.4},'i'],[.85,{Rx:-1.4,re:0,wx:1.5,Lx:-1.3,cx:.5,bx:.15,h:-.12}],[1,{}]),
+ cleave:K_([0,{}],[.3,{cy:-1.5,Rx:-1.6,re:-.2,Rz:1.1,wx:.3,Lx:-.4,Lz:.6,h:-.08,rl:.4,ll:-.4}],[.55,{cy:1.4,Rx:-1.6,re:-.1,Rz:-.2,wx:.2,bx:.15,h:-.12,rl:-.6,ll:.5},'i'],[.85,{cy:1.4,Rx:-1.6,Rz:-.2,bx:.15,h:-.12}],[1,{}]),
+ cataclysm:K_([0,{}],[.5,{Rx:-3.0,Lx:-3.0,re:-.2,le:-.2,Rz:.3,Lz:.3,cx:-.4,hx:-.4,h:-.1,rk:.4,lk:.4}],[.7,{Rx:-.4,Lx:-.4,Rz:1.2,Lz:1.2,cx:.5,bx:.2,h:-.3,rk:.7,lk:.7},'i'],[.9,{Rx:-.4,Lx:-.4,Rz:1.2,Lz:1.2,cx:.5,h:-.3}],[1,{}])};
+H.CLX.lucia=Object.assign({},CLA);H.CLX.luxio=Object.assign({},CLA);
+
+/* ----- flight: hover ~2.3m (out of reach of ground melee), aerial attacks, dive to land ----- */
+const FLY_H=2.3,FLY_T=4.5;
+const flying=()=>(P.flyU||0)>TIME;
+function takeOff(col,dm){if(AC()){/* hired allies hop and blast instead of flying */leapTo(2,.5,()=>{aoe(P.x,P.z,3.6,dm*P.mm,{mag:1,kb:7,stun:.5,col})});return}
+ if(flying()){land();return}P.flyU=TIME+FLY_T;P.vy=8;P.grounded=false;burst(P.x,P.y+.5,P.z,col,3);slamFx(P.x,P.z,col,3.6);aoe(P.x,P.z,3.6,dm*P.mm,{mag:1,kb:8,stun:.5,col});setAir(true);try{VX.snd('dodge')}catch(e){}}
+function land(soft){if(!(P.flyU>0))return;P.flyU=0;setAir(false);if(!soft)P.vy=-6}
+function setAir(on){if(AC())return;const K=KITS[Hero.key];if(!K||!K._ground)return;K.combo=on?K._air:K._ground;H.STANCE[Hero.key]=Object.assign({},on?STFLY:STL[KB()])}
+function flyFrame(dt){if(!(P.flyU>0))return;if(P.dead||!playOn||!(iam('lucia')||iam('luxio'))){land(true);return}
+ if(TIME>=P.flyU){land();return}let g;try{g=ground(P.x,P.z,P.y+.6)}catch(e){g=gY(P.x,P.z)}const ty=g+FLY_H;P.y+=(ty-P.y)*Math.min(1,dt*5);P.vy=0;P.grounded=false;
+ if(Math.random()<dt*20){const c=iam('lucia')?(Math.random()<.5?0xfff0c0:0xffc35a):(Math.random()<.5?0xff3a1a:0xff8a2a);VX.puff('spark',v3(P.x+(Math.random()-.5)*.8,P.y+.6,P.z+(Math.random()-.5)*.8),v3(0,-1.6,0),.6,.3,.1,c,.8)}}
+function burst(x,y,z,col,s){VX.puff('flare',v3(x,y,z),v3(),.3,s*.4,s,col,.9);sparks.emit(x,y,z,col,Math.round(8+s*3),s*1.6,.25,.4,-3)}
+function ring(x,z,col,r,T){VX.circle(x,z,r,T||.6,col,'guard',gY(x,z));VX.wave(x,z,col,r*.2,gY(x,z))}
+/* dive: from the air a falling strike at the aimed spot; on the ground a leap */
+function dive(col,dm,r,after){const t=aimGround(12,7);let dx=t.x-P.x,dz=t.z-P.z,d=Math.hypot(dx,dz);if(d>12){dx*=12/d;dz*=12/d;d=12}if(d>.5)P.face=FACE(dx,dz);
+ const hit=()=>{if(!playOn)return;const x=P.x,z=P.z;slamFx(x,z,col,r);VX.explode(v3(x,P.y+.4,z),1.4,col,false,true);const n=aoe(x,z,r,dm*P.mm,{mag:1,kb:9,stun:1,big:1,launch:5,col});shake(.45);HS=Math.max(HS,.07);if(after)after(x,z,n)};
+ if(flying()&&!AC()){land(true);const h=Math.max(.5,P.y-gY(P.x,P.z));dashP(Math.max(1,d),.32,{inv:.3,trail:col,keepFace:1});P.vy=-h/.32-4;P.inv=Math.max(P.inv,.35);TMR.push({t:.34,fn:hit})}
+ else leapTo(Math.max(2.5,Math.min(9,d)),.6,hit)}
+
+/* ----- LUCIA ----- */
+const LC=0xffb347;
+const luAir=[AX('skycast',.4,.45,()=>{const f=aimYaw();for(const o of[-.08,.08])proj({sp:30,life:1,dmg:9*P.mm,col:0xffd98a,size:.2,kb:2,aim:1,mag:1,dir:f+o});snd('holy')}),AX('skycast',.4,.45,()=>{const f=aimYaw();for(const o of[-.08,.08])proj({sp:30,life:1,dmg:9*P.mm,col:0xffd98a,size:.2,kb:2,aim:1,mag:1,dir:f+o});snd('holy')}),
+ AX('skycast',.55,.5,()=>{proj({sp:26,life:1.1,dmg:18*P.mm,col:0xfff0c0,size:.34,kb:4,aim:1,mag:1,big:1,expl:2.2,explDmg:10*P.mm});snd('holy')},{cancel:.7})];
+const luGround=[AX('slashR',.46,.5,()=>{melee(11,{type:'h',r:2.8,arc:120,kb:3,lunge:2,col:LC,fire:1});snd('slash')}),AX('slashL',.46,.5,()=>{melee(12,{type:'h',flip:1,r:2.8,arc:120,kb:3,lunge:2,col:LC,fire:1});snd('slash')}),
+ AX('chop',.62,.55,()=>{melee(17,{type:'v',r:3,arc:110,kb:6,big:1,stun:.4,lunge:2.5,col:LC,fire:1});const x=P.x+Math.sin(P.face)*2.2,z=P.z+Math.cos(P.face)*2.2;pillarFx(x,z,0xffd98a,2);aoe(x,z,1.8,6*P.mm,{mag:1,col:LC,silent:1});snd('holy')},{cancel:.72})];
+const heal2=(fr)=>{healP(P.max*fr);try{for(const a of ALY)if(a.down<=0&&Math.hypot(a.x-P.x,a.z-P.z)<9)a.hp=Math.min(a.max,a.hp+a.max*fr)}catch(e){}};
+KITS.lucia={name:'Lucia',role:'Seraph of the Dawn',desc:'The First Light: an androgynous seraph with the holy-fire blade Excalibur. Takes wing to rain feather-fire from the sky, dives on foes like a falling star and heals the whole party.',
+ st:ST(175,26,20,26,1.05,1),mana:120,mrate:10,imp:'impactSteel',block:{parry:.25,cd:.7},combo:luGround,_ground:luGround,_air:luAir,
+ ab:[
+  AB('wings','Wings of Dawn',12,'𓆩','#ffd98a','Take flight for 4.5s: you hover out of reach of melee foes and your attacks become volleys of feather-fire. The take-off gust knocks foes back. Press again to land.','ascend',.4,[[.2,()=>takeOff(0xffd98a,8)]],{armor:1}),
+  AB('dive','Seraph Dive',7,'⤓','#ffc35a','Plunge onto the targeted spot (from the sky it is a falling-star strike): 30 damage in 3.5m, a stun, and you heal 5% for every foe hit.','dive',.6,[[.15,()=>dive(0xffc35a,30,3.5,(x,z,n)=>{heal2(Math.min(.2,.05*n));pillarFx(x,z,0xfff0c0,3)})]],{armor:1}),
+  AB('judg','Excalibur’s Judgement',9,'⚔','#fff0c0','Raise Excalibur and bring it down: a 14m blade of holy fire through every foe in line, 34 damage, and it burns.','judgement',.7,[[.55,()=>{lineHit(14,1.8,34*P.mm,{mag:1,kb:6,stun:.4,big:1,col:0xfff0c0,fire:1});for(const e of ENEM)if(liveE(e)){const dx=e.x-P.x,dz=e.z-P.z,al=dx*Math.sin(P.face)+dz*Math.cos(P.face),pe=Math.abs(dx*Math.cos(P.face)-dz*Math.sin(P.face));if(al>0&&al<14&&pe<1.4)HZ.burnE(e,5*P.mm,3)}
+   for(let i=1;i<=7;i++){const x=P.x+Math.sin(P.face)*i*2,z=P.z+Math.cos(P.face)*i*2;TMR.push({t:i*.03,fn:()=>{if(playOn)pillarFx(x,z,0xffd98a,1.4)}})}slashFx('v',0xfff0c0,6);snd('smite');shake(.35)}]],{mp:25}),
+  AB('mend','Halo of Mending',14,'✚','#ffe9a8','A halo of dawn light: you and every ally within 9m heal 22% over 4s, and foes within 4m take 10 holy damage.','pray',.6,[[.35,()=>{hotP(.22,4);try{for(const a of ALY)if(a.down<=0&&Math.hypot(a.x-P.x,a.z-P.z)<9)a.hp=Math.min(a.max,a.hp+a.max*.22)}catch(e){}ring(P.x,P.z,0xffe9a8,9,.8);VX.heal(P.x,P.y,P.z,0xffe9a8);aoe(P.x,P.z,4,10*P.mm,{mag:1,kb:5,col:0xffe9a8});snd('holy')}]],{mp:30}),
+  AB('feath','Feather Storm',10,'❋','#ffd98a','Sweep your wings: nine burning feathers fan out (12 damage each) and slow what they hit. Works in the air too.','castUp',.5,[[.3,()=>{const f=aimYaw();for(let i=-4;i<=4;i++)proj({sp:24,life:.8,dmg:12*P.mm,col:0xfff0c0,size:.16,r:.4,kb:2,aim:0,dir:f+i*.13,mag:1,slow:.4,slowT:1.5,knife:1});snd('holy')}]],{mp:20}),
+  AB('sanct','Sun’s Sanctuary',20,'☀','#ffc94a','Consecrate the ground around you for 6s (6m): you and allies inside heal 3% a second and take 15% less damage; foes inside burn.','castDown',.7,[[.45,()=>{const x=P.x,z=P.z,mm=P.mm;slamFx(x,z,0xffc94a,6);zone2({x,z,r:6,T:6,tick:.5,col:0xffc94a,tickFn:()=>{if(Math.hypot(P.x-x,P.z-z)<6&&iam('lucia'))healP(P.max*.015);try{for(const a of ALY)if(a.down<=0&&Math.hypot(a.x-x,a.z-z)<6)a.hp=Math.min(a.max,a.hp+a.max*.015)}catch(e){}for(const e of ENEM)if(liveE(e)&&inR(e,x,z,6))HZ.burnE(e,4*mm,1.2)},
+   frame:()=>{if(Math.random()<.5){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*5.8;VX.puff('spark',v3(x+Math.cos(a)*r,gY(x,z)+.2,z+Math.sin(a)*r),v3(0,2,0),.7,.3,.08,0xffd98a,.8)}}});SANCT.push({x,z,u:TIME+6});snd('smite')}]],{mp:40})]};
+const SANCT=[];
+/* ----- LUXIO ----- */
+const XC=0xff3a1a;
+const xoAir=[AX('skycast',.42,.45,()=>{proj({sp:26,life:1,dmg:12*P.pm,col:0xff6a2a,size:.26,kb:3,aim:1,expl:1.6,explDmg:6*P.pm,onHit:e=>HZ.burnE(e,4*P.pm,2)});snd('fire')}),AX('skycast',.42,.45,()=>{proj({sp:26,life:1,dmg:12*P.pm,col:0xff6a2a,size:.26,kb:3,aim:1,expl:1.6,explDmg:6*P.pm,onHit:e=>HZ.burnE(e,4*P.pm,2)});snd('fire')}),
+ AX('skycast',.56,.5,()=>{proj({sp:22,life:1.2,dmg:20*P.pm,col:0xff3a1a,size:.4,kb:5,aim:1,big:1,expl:2.6,explDmg:12*P.pm,onHit:e=>HZ.burnE(e,5*P.pm,3)});snd('fire')},{cancel:.7})];
+const xoGround=[AX('slashR',.46,.5,()=>{const n=cone(2.9,125,12*P.pm,{kb:3,col:XC,fire:1});slashFx('h',XC,2.9);burnCone(2.9,125,3);P.kx+=Math.sin(P.face)*2;P.kz+=Math.cos(P.face)*2;snd('slash')}),AX('slashL',.46,.5,()=>{cone(2.9,125,13*P.pm,{kb:3,col:XC,fire:1});slashFx('h',XC,2.9,1);burnCone(2.9,125,3);P.kx+=Math.sin(P.face)*2;P.kz+=Math.cos(P.face)*2;snd('slash')}),
+ AX('chop',.64,.55,()=>{const x=P.x+Math.sin(P.face)*2,z=P.z+Math.cos(P.face)*2;slamFx(x,z,XC,2.6);aoe(x,z,2.6,20*P.pm,{kb:7,stun:.5,big:1,col:XC,fire:1});scorch(x,z,2.4,3);snd('boom');shake(.25)},{cancel:.74})];
+function burnCone(r,arc,T){const half=Math.cos(arc*PI/360),fx=Math.sin(P.face),fz=Math.cos(P.face);for(const e of ENEM){if(!liveE(e))continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz);if(d<r+e.r&&(dx*fx+dz*fz)/(d||1)>half)HZ.burnE(e,4*P.pm,T)}}
+function scorch(x,z,r,T){const pm=P.pm;zone2({x,z,r,T,tick:.5,col:0xff4a12,tickFn:()=>{for(const e of ENEM)if(liveE(e)&&inR(e,x,z,r)){hurtEnemy(e,4*pm,0,0,0);HZ.burnE(e,3*pm,1)}},frame:()=>{if(Math.random()<.6){const a=Math.random()*6.28,q=Math.sqrt(Math.random())*r;VX.puff('aura',v3(x+Math.cos(a)*q,gY(x,z)+.2,z+Math.sin(a)*q),v3(0,2,0),.6,.5,.2,Math.random()<.5?0xff4a12:0xff8a2a,.6)}}})}
+const BRANDS=[];
+KITS.luxio={name:'Luxio',role:'Archfiend of the Ember Throne',desc:'The First Flame: an androgynous archfiend with the red demon blade Ruinbrand. Rises on cinder wings to bomb foes with hellfire, crashes down like a meteor, and burns everything to the ground. Foes that die burning restore 4% of Luxio’s health.',
+ st:ST(170,22,27,18,1.05,1.05),imp:'impactAxe',warm:1,combo:xoGround,_ground:xoGround,_air:xoAir,
+ ab:[
+  AB('wings','Infernal Ascent',12,'𓆩','#ff6a2a','Rise on cinder wings for 4.5s: out of reach of melee foes, your attacks become exploding hellfire bolts. The take-off blast burns everything within 3.6m. Press again to land.','ascend',.4,[[.2,()=>{takeOff(0xff4a12,12);for(const e of ENEM)if(liveE(e)&&inR(e,P.x,P.z,3.6))HZ.burnE(e,4*P.pm,3)}]],{armor:1}),
+  AB('dive','Meteor Fall',8,'☄','#ff4a12','Crash onto the targeted spot like a meteor: 36 damage in 4m and a crater that burns for 4s.','dive',.6,[[.15,()=>dive(0xff4a12,36,4,(x,z)=>{scorch(x,z,3.6,4);VX.explode(v3(x,gY(x,z)+.6,z),2.2,0xff8a2a,true,true)})]],{armor:1}),
+  AB('cleave','Ruinbrand Cleave',7,'⚔','#ff3a1a','A huge half-circle sweep of Ruinbrand: 30 damage within 5m, heavy knockback, and every foe hit burns.','cleave',.6,[[.5,()=>{cone(5,180,30*P.pm,{kb:10,stun:.4,big:1,col:XC,fire:1});burnCone(5,180,4);slashFx('h',XC,5);snd('boom');shake(.3)}]],{armor:1}),
+  AB('rain','Brimstone Rain',14,'☄','#ff8a2a','Call down eight fireballs over a 6m area around the targeted spot: 16 damage each in 2.2m, and they set the ground alight.','castUp',.6,[[.35,()=>{const t=aimGround(14,8),pm=P.pm;telegraph(t.x,t.z,6,1.2,null,0xff4a12);for(let i=0;i<8;i++){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*5,x=t.x+Math.cos(a)*r,z=t.z+Math.sin(a)*r;
+    TMR.push({t:.45+i*.18,fn:()=>{if(!playOn)return;const sv=P.pm;P.pm=pm;try{VX.explode(v3(x,gY(x,z)+.4,z),1.1,0xff6a2a,true,false);slamFx(x,z,XC,2.2);aoe(x,z,2.2,16*P.pm,{kb:5,stun:.3,col:XC,fire:1});for(const e of ENEM)if(liveE(e)&&inR(e,x,z,2.2))HZ.burnE(e,4*P.pm,2)}finally{P.pm=sv}}})}snd('fire')}]]),
+  AB('brand','Hellbrand',10,'✹','#ff2a1a','Brand the targeted foe with a burning sigil. After 2.5s (or when it dies) it explodes: 40 damage to it and 20 to everything within 4m, spreading the burn.','cast',.45,[[.3,()=>{const t=aimTarget(18);if(!t){toast('No target','bad');return}VX.circle(t.x,t.z,t.r+.6,2.5,XC,'crng',t.y);BRANDS.push({e:t,u:TIME+2.5,pm:P.pm});HZ.burnE(t,4*P.pm,2.5);snd('fire')}]]),
+  AB('cata','Cataclysm',22,'✺','#ff5a1e','Gather the Ember Throne’s fury, then detonate: a 7m inferno for 48 damage that launches foes and scorches the ground. Costs 8% of your health.','cataclysm',1.0,[[.35,()=>{ring(P.x,P.z,XC,7,.5);for(let i=0;i<10;i++)VX.puff('aura',v3(P.x+(Math.random()-.5)*6,P.y+.3,P.z+(Math.random()-.5)*6),v3(0,3,0),.5,.6,.2,0xff4a12,.6)}],[.7,()=>{const x=P.x,z=P.z;P.hp=Math.max(1,P.hp-P.max*.08);slamFx(x,z,XC,7);slamFx(x,z,0xff8a2a,4.5);VX.explode(v3(x,P.y+.6,z),3.2,0xff6a2a,true,true);aoe(x,z,7,48*P.pm,{kb:12,stun:1,big:1,launch:7,col:XC,fire:1});for(const e of ENEM)if(liveE(e)&&inR(e,x,z,7))HZ.burnE(e,6*P.pm,4);scorch(x,z,5,4);shake(.8);HS=Math.max(HS,.12);snd('boom')}]],{armor:1})]};
+function updBrands(){for(let i=BRANDS.length-1;i>=0;i--){const b=BRANDS[i],e=b.e;if(!e||(e.dead&&!b.boomed)||TIME>=b.u){BRANDS.splice(i,1);if(!e)continue;const x=e.x,z=e.z;const sv=P.pm;P.pm=b.pm;try{VX.explode(v3(x,(e.y||gY(x,z))+1,z),2,0xff3a1a,true,true);slamFx(x,z,XC,4);if(!e.dead)hitE(e,40*P.pm,{kb:6,stun:.6,big:1,col:XC,fire:1});aoe(x,z,4,20*P.pm,{kb:7,col:XC,fire:1,once:new Set([e])});for(const q of ENEM)if(liveE(q)&&inR(q,x,z,4))HZ.burnE(q,4*P.pm,3);shake(.35)}finally{P.pm=sv}}
+  else if(Math.random()<.3)sparks.emit(e.x,e.y+(e.ly||0)+e.h+.3,e.z,XC,2,2,.2,.3,1)}}
+for(const k of PREM){const K=KITS[k];K.key=k;K.mana=K.mana||0;NEWK.push(k)}
+Object.assign(TRK,{lucia:['tip'],luxio:['tip']});
+const SND_={slash:()=>VX.A([['slash',{gain:.55,rate:1.15,pj:.1}]]),holy:()=>VX.A([['heal',{gain:.6,rate:1.2}],['plate',{gain:.2,rate:1.8,delay:.02}]]),smite:()=>VX.A([['exp',{gain:.6,rate:1.3}],['heal',{gain:.7,rate:.85,delay:.02}]]),
+ fire:()=>VX.A([['fire',{id:'fire4',gain:.5,rate:.9}],['expS',{gain:.4,rate:1.1,delay:.01}]]),boom:()=>VX.A([['exp',{gain:.85,rate:.9}],['blunt',{gain:.5,rate:.7,delay:.02}]])};
+function snd(k){try{SND_[k]()}catch(e){}}
+
+/* =====================================================================  ENGINE HOOKS  */
+try{AKF.push('flyU')}catch(e){}
+{const _p=hurtPlayer;hurtPlayer=function(dmg,sx,sz,kb,unblock){if(dmg>0&&SANCT.length){for(let i=SANCT.length-1;i>=0;i--){const s=SANCT[i];if(TIME>s.u){SANCT.splice(i,1);continue}if(Math.hypot(P.x-s.x,P.z-s.z)<6){dmg*=.85;break}}}return _p.call(this,dmg,sx,sz,kb,unblock)}}
+{const _k=killEnemy;killEnemy=function(e){const burning=e&&e.brn&&e.brn.T>0;const r=_k.apply(this,arguments);try{if(burning&&iam('luxio')&&playOn&&!P.dead)healP(P.max*.04)}catch(x){}return r}}
+{const _u=updKit2;updKit2=function(dt){_u(dt);try{frame(dt)}catch(e){console.warn('[corinth]',e)}}}
+{const _k=killKit2;killKit2=function(){_k();try{if(P.flyU>0)land(true);BRANDS.length=0;SANCT.length=0}catch(e){}}}
+{const _a=applyKit;applyKit=function(){const r=_a.apply(this,arguments);try{if(!AC()){P.flyU=0;for(const k of PREM){if(KITS[k]._ground)KITS[k].combo=KITS[k]._ground;H.STANCE[k]=Object.assign({},STL[k])}}}catch(e){}return r}}
+/* Book II chapters: summoned minions belong to the new realms */
+const BOOK2_MIN={ch8:['seraphling','halowarden'],ch9:['imp','brimbrute'],ch10:['hatchling','paragon'],ch11:['hatchling','halowarden'],ch12:['imp','paragon'],ch13:['hatchling','paragon'],ch14:['hatchling','paragon']};
+{const _s=spawnEnemy;spawnEnemy=function(kind,x,z,tag,key,opt){try{const m=S&&BOOK2_MIN[S.id];if(m&&(tag==='minion'||tag==='summon')){if(kind==='mutant'||kind==='razor')kind=m[0];else if(kind==='bulwark')kind=m[1]}}catch(e){}return _s.call(this,kind,x,z,tag,key,opt)}}
+function frame(dt){
+ flyFrame(dt);updBrands();
+ const live=playOn&&!P.dead;
+ /* wings + design variants on every rig we know */
+ if(HR&&HR.wings){HR.wings.k+=((flying()?1:0)-HR.wings.k)*Math.min(1,dt*6)}
+ if(HR&&HR.vars)setVar(HR,curV(Hero.key));
+ try{for(const a of ALY){if(a.R&&a.R.wings)a.R.wings.k+=(((a.grounded===false)?1:0)-a.R.wings.k)*Math.min(1,dt*6)}}catch(e){}
+ try{if(typeof NET!=='undefined'&&NET.remote)for(const r of NET.remote.values()){const R=r.rig;if(!R)continue;if(R.vars)setVar(R,(r.a&&r.a.pal&&r.a.pal.v)|0);if(R.wings)R.wings.k+=((((r.fl|0)&8)?1:0)-R.wings.k)*Math.min(1,dt*6)}}catch(e){}
+ if(live&&(iam('lucia')||iam('luxio'))){hudT-=dt;if(hudT<=0){hudT=.1;hud()}}else if(hudOn)hud()}
+let hudT=0,hudEl=null,hudOn=false;
+function hud(){if(!hudEl){hudEl=document.createElement('div');hudEl.id='c7hud';document.body.appendChild(hudEl)}const on=playOn&&!P.dead&&(iam('lucia')||iam('luxio'))&&flying();
+ if(on){const l=Math.max(0,P.flyU-TIME),c=iam('lucia')?'#ffd98a':'#ff6a2a';hudEl.innerHTML=`<div class="c7t" style="color:${c}">${iam('lucia')?'Wings of Dawn':'Infernal Ascent'} · ${l.toFixed(1)}s</div><div class="c7b"><i style="width:${l/FLY_T*100}%;background:${c}"></i></div>`}
+ hudEl.classList.toggle('on',on);hudOn=on}
+
+/* =====================================================================  REGISTRATION  */
+try{STORDER.push(...PREM)}catch(e){}
+try{Object.assign(AKS,{lucia:{rng:2.8},luxio:{rng:2.9}})}catch(e){}
+try{Object.assign(AKAI,{lucia:[['mend',c=>c.pm<.6],['sanct',c=>c.pm<.5||c.n6>=4],['judg',c=>c.nT>=2||c.boss],['dive',c=>c.g>3&&c.g<10],['feath',c=>c.n9>=3],['wings',c=>c.n6>=3]],
+ luxio:[['cata',c=>c.n6>=4&&c.me>.4],['rain',c=>c.nT>=3||c.boss],['brand',c=>c.boss||c.big],['cleave',c=>c.n6>=2&&c.g<4],['dive',c=>c.g>3&&c.g<10],['wings',c=>c.n6>=3]]})}catch(e){}
+try{Object.assign(ALR,{lucia:{t:'m',sp:'heal',col:0xffd98a,hpm:1.15},luxio:{t:'m',sp:'slam',col:0xff4a12,hpm:1.1,dmm:1.15}})}catch(e){}
+try{Object.assign(NPCD,{
+ lucia:{g:["Lucia’s wings fold like a closing book. “You carry the Codex’s light. Good. I have been waiting a very long time for someone who does.”","“I am Lucia. I kept the gates of the Empyrean until they cracked. Something struck Heaven from below, and I know whose fire it was.”"],r:["“The light remembers you.”"],w:["“Fly with me.”"],t:[["Who is Luxio?",["“The other half of the first spark. We were one flame once. Now we are a quarrel that never ends.”"]],["Excalibur?",["“Forged from the Aurealia’s first light. It burns, but it does not hate. That is the difference between us.”"]]],p:["“Even a seraph keeps a tithe. Stars will do.”"],h:["“Then the dawn is ours.”"],f:["“Our oath still stands.”"],n:["“Not yet.”"]},
+ luxio:{g:["Luxio lands in a shower of cinders and grins. “So you’re the one who burned the last page. I like you already.”","“Luxio. I built the Ember Throne with my own hands, and something cracked my ceiling. I intend to find out what. Lucia will say it was me. Lucia always does.”"],r:["“Still alive? Impressive.”"],w:["“Let’s set something on fire.”"],t:[["Who is Lucia?",["“My twin. My other half. The most insufferable creature in any realm. I would burn the world for them, and they know it, and that is the whole problem.”"]],["Ruinbrand?",["“The first spark’s shadow, quenched in the Forge. It doesn’t warm things. It ends them.”"]]],p:["“Fire isn’t free. Neither am I.”"],h:["“Deal. Try to keep up.”"],f:["“Already paid. Let’s burn.”"],n:["“Bring more stars.”"]}})}catch(e){}
+try{const A=TRAIN.A,yard=(H2,id,name,x,z,n)=>{H2.dummies(id,name,x,z,n,{col:1,span:20,r:12});H2.lbl(name.toUpperCase()+' · free practice',x,z+9,3.4)};
+ A.lucia={title:'The Dawn Court',theme:'empyrean',mood:'dawn',ground:'stone',dps:[230,410,640],fx:{fireflies:0,dust:0,mist:1,leaves:0,snow:0,ash:0,runes:1},blurb:'A seraph: fly over the crowd, rain feather-fire, dive back down and keep the party healed.',
+  learn:['Wings of Dawn lifts you out of melee reach for 4.5s and turns your attacks into feather-fire.','Seraph Dive from the sky is a falling-star strike that heals you for every foe hit.','Sun’s Sanctuary heals allies and cuts the damage you take while you stand in it.'],
+  build(H2){H2.ring('marblecol',0,-4,46,12);yard(H2,'dawn','Dawn Range',-40,-14,5);H2.trial('star','Falling Star','Take off, then dive into the pack.',40,-14,[{k:'mutant',n:10,ring:7}],[18,28,44],{r:14});H2.trial('vigil','Vigil','Outlast a long fight: keep yourself healed.',-40,24,[{k:'mutant',n:8,ring:9},{k:'brute',n:2,ring:6}],[26,40,60],{r:15})}};
+ A.luxio={title:'The Cinder Pit',theme:'abyss',mood:'dusk',ground:'dirt',dps:[250,440,700],fx:{fireflies:0,dust:1,mist:0,leaves:0,snow:0,ash:1,embers:1},blurb:'An archfiend: set everything on fire, bomb it from the air and finish it with Cataclysm.',
+  learn:['Foes that die while burning restore 4% of your health: burn first, then kill.','Hellbrand explodes after 2.5s or when the target dies, spreading the burn.','Cataclysm costs health: use it on big packs only.'],
+  build(H2){H2.ring('hellspire',0,-4,44,10);yard(H2,'cinder','Cinder Range',-40,-14,5);H2.trial('raze','Raze','Burn down a tight pack.',40,-14,[{k:'mutant',n:14,ring:5}],[16,26,40],{r:12});H2.trial('meteor','Meteor Shower','Fly, bomb and crash into waves.',-40,24,[{k:'mutant',n:6,ring:10},{k:'mutant',n:6,ring:10,d:6},{k:'brute',n:2,ring:8,d:12}],[28,40,60],{r:15})}}}catch(e){console.warn('[corinth] training',e)}
+/* the codex / studio see the premium bases too */
+try{HERO_BASES.push(...PREM)}catch(e){}
+
+/* =====================================================================  BOOK II · STORY  */
+ROMAN.splice(8,3,'I','II','III','IV','V','VI','VII');
+const B2=[
+ {id:'ch8',n:8,tier:3,book:2,title:'The Shattered Halo',place:'The Empyrean Steps',icon:'◯',accent:'#ffd98a',theme:'empyrean',mood:'dawn',ground:'stone',boss:'ophanel',rec:6,pool:['seraphling','halowarden','choir','nightshade','archer'],len:'Medium',
+  blurb:'The last page of the Codex burned blank, and the sky cracked like glass. Heaven’s stairway is falling.',
+  intro:'When the Void Sovereign fell, the last page of the Neon Codex turned blank and bright. But a blank page is not an empty one. The fracture between the Order’s light and the Codex’s ink ran upward into the Empyrean, and Heaven’s great halo shattered. Its pieces are raining onto the Steps, and its wardens have gone mad with grief. A seraph named Lucia waits at the foot of the stair. Lucia says something older than the Order is waking.',
+  outro:'Ophanel’s wheel of eyes closes for the last time and the broken halo stops falling. Lucia lifts Excalibur toward the cracked sky. "The light did not break on its own," Lucia says. "Something struck it from below. I know that fire. I would know it anywhere."'},
+ {id:'ch9',n:9,tier:4,book:2,title:'The Ember Throne',place:'The Abyssal Forge',icon:'♨',accent:'#ff4a12',theme:'abyss',mood:'dusk',ground:'dirt',boss:'malgrath',rec:7,pool:['imp','hellhound','brimbrute','cinderwitch','bomber'],len:'Medium+',
+  blurb:'The fracture tore Hell’s ceiling open. The Abyssal Forge is spilling upward, and its master is not at home.',
+  intro:'Below the world, the fracture split the Abyss like a cracked anvil. Fire pours up through the rifts and the Ember Throne stands empty. Its master, Luxio, has risen to the edge of the Forge to meet you: not as an ally, but as someone who wants the same answer you do. In Luxio’s absence, Malgrath, Warden of Cinders, has claimed the throne.',
+  outro:'Malgrath’s crown melts into the slag. Luxio sits on the Ember Throne just long enough to laugh, then stands. "Lucia blames me for the broken halo," Luxio says. "Lucia always blames me. Fine. Let’s go and ask Lucia to my face."'},
+ {id:'ch10',n:10,tier:4,book:2,title:'Where the Blades Met',place:'The Riftfield of Seraph’s Fall',icon:'⚔',accent:'#ffb070',theme:'schism',mood:'overcast',ground:'stone',boss:'twinecho',rec:8,pool:['seraphling','halowarden','imp','hellhound','hatchling'],len:'Long',
+  blurb:'Excalibur and Ruinbrand meet where the first spark split in two. Every clash widens the rift.',
+  intro:'Lucia and Luxio meet on the Riftfield of Seraph’s Fall, where the first spark split in two at the dawn of the realms. Neither will lower a blade. Every time Excalibur and Ruinbrand clash, the rift widens, and light and fire bleed into each other. From that mixing, something is crawling out of the ground. Something new.',
+  outro:'The Twin Echo, a shade made from the fury of both blades, shatters into feathers and ash. In its place a small creature blinks up at you: one wing of white feathers, one of ember. It is not afraid. Lucia and Luxio stare at it, and for once they are both silent. Then Luxio says the word nobody wanted to say: "Ours."'},
+ {id:'ch11',n:11,tier:5,book:2,title:'The Feathered Ash',place:'The Ashen Cloister',icon:'❋',accent:'#ff9a5a',theme:'empyrean',mood:'overcast',ground:'stone',boss:'ashseraph',rec:9,pool:['hatchling','choir','seraphling','cinderwitch','imp','chorister'],len:'Long',
+  blurb:'Fire from below has met feathers from above. The new creatures are nesting in Heaven’s oldest library.',
+  intro:'The new creatures are spreading. The angels call them abominations; the demons call them thieves. They call themselves nothing yet. In the Ashen Cloister, Heaven’s oldest library, fire from below has met feathers from above, and the hatchlings are nesting in the ashes. A seraph of the Cloister burned and did not die, and now it guards the nests with a fury that belongs to neither realm.',
+  outro:'The Cindershroud Seraph kneels in the ash and the fire leaves its eyes. "They are not evil," it whispers. "They are only new. We were new once." Lucia is quiet for a long time. Then Lucia sheathes Excalibur.'},
+ {id:'ch12',n:12,tier:6,book:2,title:'The Gilded Pit',place:'Gloria Infernum',icon:'♛',accent:'#ffd24a',theme:'abyss',mood:'crypt',ground:'dirt',boss:'baelith',rec:11,pool:['imp','brimbrute','hellhound','cinderwitch','halowarden','paragon'],len:'Very long',
+  blurb:'Heaven’s light has fallen into Hell. Demons are growing halos, and one of them wants both realms.',
+  intro:'Light has fallen into Hell, too. In Gloria Infernum, a pit of the Abyss now gilded by Heaven’s broken halo, demons have begun to grow halos, and they do not know whether to worship them or tear them off. Baelith, a demon lord crowned with a halo of stolen light, has decided to conquer both realms before the new beings can.',
+  outro:'Baelith’s stolen halo cracks and drifts upward, home. Luxio catches a piece of it and does not burn. "Huh," Luxio says, turning it over. "It doesn’t hate me." Far above, a tower of white stone and black glass has begun to grow out of the rift.'},
+ {id:'ch13',n:13,tier:6,book:2,title:'The Choir of Neither',place:'The Corinth Spire',icon:'⧗',accent:'#ffb070',theme:'schism',mood:'night',ground:'stone',boss:'seraxis',rec:12,pool:['paragon','chorister','hatchling','halowarden','brimbrute','seraphling'],len:'Very long',
+  blurb:'The new beings have named themselves: the Corinthians. Their spire rises between Heaven and Hell.',
+  intro:'The new beings have a name now, and they gave it to themselves: the Corinthians. Their spire rises between Heaven and Hell, built of marble and obsidian in equal measure, and they sing in a choir of two voices. Their champion, Paragon Seraxis, will not let angels or demons climb it. You are neither, so the gate opens for you, but only to be tested.',
+  outro:'Seraxis lowers a blade forged half of light and half of fire, and bows. "You fought well," it says, "and you fought without hatred. The First is waking at the top of the spire. It wants to meet the ones who made it." Lucia and Luxio look at each other and, side by side, climb.'},
+ {id:'ch14',n:14,tier:7,book:2,title:'The Rise of the Corinthians',place:'The Unwritten Sky',icon:'✺',accent:'#ffb070',theme:'schism',mood:'void',ground:'void',boss:'corinth',rec:13,pool:['paragon','chorister','hatchling','seraphling','halowarden','choir','imp','hellhound','brimbrute','cinderwitch'],len:'Epic',
+  blurb:'At the top of the spire the sky is a blank page. Corinth, the First of the New, is waiting.',
+  intro:'At the top of the spire, the sky is a blank page. Corinth, the First of the New, is waiting: born from the moment Excalibur and Ruinbrand first met, and grown from every clash since. It is not angry. It is not kind. It is simply powerful, and it wants to know whether there is room in the realms for something that is neither light nor fire. There is only one way to ask a Corinthian a question. You fight it.',
+  outro:'Corinth stops: not beaten, not broken, satisfied. It takes the blank page of the sky and writes a single line on it, and the realms settle, Heaven above and Hell below, with a new country in between. Lucia offers Luxio a hand. Luxio takes it, and the two halves of the first spark glow the same colour for the first time in an age. Book II of the Codex closes. The Corinthians have risen.'}];
+const FX2={empyrean:{fireflies:0,dust:0,mist:1,leaves:0,snow:0,ash:0,runes:1},abyss:{fireflies:0,dust:1,mist:0,leaves:0,snow:0,ash:1,embers:1,smoke:1},schism:{fireflies:0,dust:0,mist:1,leaves:0,snow:0,ash:1,embers:1,runes:1,void:1}};
+for(const C of B2){C.fx=FX2[C.theme];CHAPTERS.push(C);CHI[C.id]=C}
+const L2={
+ ch8:{seed:88,paint:1,paintC:1,wall:'dwall2',tag:'empyrean',segs:[
+  {t:'entry',npc:[['lucia',-8,-4,'Lucia','Seraph of the Dawn','The halo shattered at dawn. Its wardens are attacking anything that moves, even each other. Climb the Steps with me. We need to know what struck Heaven, and why.'],['seraphine',9,-6,'Seraphine','Light Priestess','Seraphine shades her eyes against the broken sky. "I have prayed to that light all my life. I never thought I would see it bleed."']]},COR(),
+  ARN({name:'the Fallen Stair',dress:'empyrean',g:[['seraphling',3],['halowarden',2],['nightshade',2]],say:['lucia','The stair is clear. A shard of the halo fell into the Chapel of Wings to the east. Bring it back and we can stop the fall.']}),COR(),
+  ARN({name:'the Court of Feathers',dress:'empyrean',g:[['halowarden',2],['choir',2],['seraphling',3],['archer',2]],alt:{side:'E',title:'Chapel of Wings',relic:'the Halo Shard',altar:'Restore the Halo Shard',hard:1,say:['lucia','The shard is home. Listen. The halo is singing again, but there is a second voice under it. Fire.']},chest:2}),COR(),
+  RFT({name:'the Weeping Choir',dress:'empyrean',n:3,g:[['choir',2],['seraphling',3],['halowarden',1]],say:['seraphine','The rifts close. Something huge is turning above us. A wheel... made of eyes.']}),COR(),
+  ARN({name:'the Gate of Pearl',dress:'empyrean',g:[['halowarden',3],['seraphling',4],['choir',2],['nightshade',2]],hz:'vpool',chest:1}),COR(),
+  BOS({kind:'ophanel',hp:2000,tag:'ophanel',dress:'empyrean',say:['lucia','Ophanel! It turned the halo for an age. Its grief has driven it mad. Keep moving, it sees everything!']})]},
+ ch9:{seed:99,paint:3,paintC:3,wall:'dwall',tag:'abyss',segs:[
+  {t:'entry',npc:[['luxio',-8,-4,'Luxio','Archfiend of the Ember Throne','Welcome to my Forge. Mind the floor, it bites. Some upstart is sitting on my throne while I was out. Help me take it back and I will tell you who cracked Heaven. Probably.'],['moros',9,-6,'Moros','Thrallmaster','Moros regards the fire with professional interest. "So many souls in the slag. Do not worry. They are not mine. Yet."']]},COR(),
+  ARN({name:'the Slag Gate',dress:'abyss',g:[['imp',4],['hellhound',2],['bomber',2]],say:['luxio','Good. The Brand of the Throne is in the Furnace Vault to the west. Without it nobody sits on that chair. Not even me.']}),COR(),
+  ARN({name:'the Chain Gallery',dress:'abyss',g:[['brimbrute',1],['imp',3],['cinderwitch',2],['hellhound',2]],alt:{side:'W',title:'Furnace Vault',relic:'the Brand of the Throne',altar:'Set the Brand in the Forge',hard:1,say:['luxio','Feel that? The Forge knows its master again. Now for the usurper.']},hz:'spikes',chest:2}),COR(),
+  RFT({name:'the Brimstone Wells',dress:'abyss',n:3,g:[['cinderwitch',2],['imp',3],['brimbrute',1]],say:['moros','The wells are capped. The heat is rising from the throne room. Your usurper is awake.']}),COR(),
+  ARN({name:'the Molten Nave',dress:'abyss',g:[['brimbrute',2],['hellhound',3],['imp',4],['cinderwitch',2]],hz:'spikes',chest:1}),COR(),
+  BOS({kind:'malgrath',hp:2600,tag:'malgrath',dress:'abyss',say:['luxio','Malgrath. I made you Warden of the Cinders, and this is the thanks I get? Burn him down!']})]},
+ ch10:{seed:101,paint:1,paintC:3,wall:'dwall2',tag:'schism',segs:[
+  {t:'entry',npc:[['lucia',-9,-4,'Lucia','Seraph of the Dawn','Luxio struck the halo. I am certain of it. Stand with me and we will end this where it began.'],['luxio',9,-4,'Luxio','Archfiend of the Ember Throne','Lucia cracked my ceiling first. I can prove it. Stand with me and we will end this where it began. ...Did we just say the same thing?']]},COR(),
+  ARN({name:'the Field of Feathers and Ash',dress:'schism',g:[['seraphling',2],['imp',3],['halowarden',1],['hellhound',1]],say:['lucia','Both hosts are here, angels and demons, and they are not fighting each other. They are fighting something else. Look at the ground.']}),COR(),
+  ARN({name:'the Crater of the First Clash',dress:'schism',g:[['hatchling',3],['halowarden',2],['hellhound',2],['seraphling',2]],alt:{side:'E',title:'The Spark Hollow',relic:'the Twin Spark',altar:'Kindle the Twin Spark',hard:1,say:['luxio','The Spark burns gold and red at once. That... should not be possible. Unless it always was.']},chest:2}),COR(),
+  RFT({name:'the Bleeding Rift',dress:'schism',n:4,g:[['hatchling',3],['imp',2],['seraphling',2]],say:['lucia','The rifts close, but they leave something behind. A shape made of both our blades. It is angry, and it has our faces.']}),COR(),
+  ARN({name:'Seraph’s Fall',dress:'schism',g:[['hatchling',4],['halowarden',2],['brimbrute',1],['seraphling',3],['imp',3]],chest:1}),COR(),
+  BOS({kind:'twinecho',hp:2400,tag:'twinecho',dress:'schism',say:['luxio','That is us. The worst of us, stitched together. Lucia, for once in eternity, fight beside me!']})]},
+ ch11:{seed:111,paint:1,paintC:1,wall:'dwall2',tag:'cloister',segs:[
+  {t:'entry',npc:[['lucia',-8,-4,'Lucia','Seraph of the Dawn','The Cloister is burning, and the new ones are nesting in the ash. The angels want them destroyed. I am no longer sure what I want.'],['leander',9,-6,'Leander','Celestial Knight','Leander grips his lance. "I have fought rift-spawn and void-kings. I do not know how to fight a child with one feather wing."']]},COR(),
+  ARN({name:'the Ash Garden',dress:'cloister',g:[['hatchling',4],['seraphling',2],['cinderwitch',1]],say:['lucia','The nests are deeper in. And there are angels in there with fire in their eyes. We will have to go through them.']}),COR(),
+  ARN({name:'the Scriptorium of Embers',dress:'cloister',g:[['choir',2],['hatchling',3],['cinderwitch',2],['chorister',1]],alt:{side:'W',title:'The Nest Archive',relic:'the First Feather',altar:'Lay the First Feather on the altar',hard:1,say:['leander','The feather is half white, half ember, and warm. Whatever these creatures are, they are not dying.']},chest:2}),COR(),
+  RFT({name:'the Smouldering Stacks',dress:'cloister',n:3,g:[['chorister',1],['hatchling',3],['seraphling',2]],say:['lucia','The rifts are closed. The Cloister’s keeper is coming. I knew it once. It sang to me when I was young.']}),COR(),
+  ARN({name:'the Burning Nave',dress:'cloister',g:[['hatchling',4],['imp',3],['choir',2],['chorister',1],['cinderwitch',2]],hz:'vpool',chest:1}),COR(),
+  BOS({kind:'ashseraph',hp:2800,tag:'ashseraph',dress:'cloister',say:['lucia','The Cindershroud Seraph. It burned and did not die. Do not hate it. Just stop it.']})]},
+ ch12:{seed:121,paint:3,paintC:3,wall:'dwall',tag:'gilded',segs:[
+  {t:'entry',npc:[['luxio',-8,-4,'Luxio','Archfiend of the Ember Throne','Gloria Infernum. Hell, gilded. My demons are growing halos and losing their minds. And Baelith has decided he is a god now. I want his crown off his head, ideally with his head still attached.'],['nyx',9,-6,'Nyx','Riftwalker','Nyx tilts her head. "The rift whispers in two voices here. One prays. One laughs. I do not like either."']]},COR(),
+  ARN({name:'the Gilded Descent',dress:'gilded',g:[['imp',4],['halowarden',2],['hellhound',2]],say:['luxio','Angels and demons in the same pit, both answering to Baelith. He has a Censer of Stolen Light in the east reliquary. Take it from him.']}),COR(),
+  ARN({name:'the Haloed Market',dress:'gilded',g:[['brimbrute',2],['paragon',1],['cinderwitch',2],['imp',3]],alt:{side:'E',title:'The Reliquary',relic:'the Censer of Stolen Light',altar:'Smother the Stolen Light',hard:1,say:['nyx','The light goes out and the second voice stops praying. Baelith will feel that.']},hz:'spikes',chest:2}),COR(),
+  RFT({name:'the Golden Furnace',dress:'gilded',n:4,g:[['brimbrute',1],['imp',3],['paragon',1],['cinderwitch',2]],say:['luxio','That is the last of the furnaces. Baelith’s throne room is ahead. Mind the shield. He loves that shield.']}),COR(),
+  ARN({name:'the Court of Two Crowns',dress:'gilded',g:[['paragon',2],['halowarden',2],['hellhound',3],['brimbrute',1],['imp',3]],chest:1}),COR(),
+  BOS({kind:'baelith',hp:3200,tag:'baelith',dress:'gilded',say:['luxio','Baelith the Haloed. He stole a crown from Heaven and thinks it makes him one of them. Hit him from behind!']})]},
+ ch13:{seed:131,paint:1,paintC:1,wall:'dwall2',tag:'corinth',segs:[
+  {t:'entry',npc:[['lucia',-9,-4,'Lucia','Seraph of the Dawn','The Corinthians will not let angels climb their spire.'],['luxio',9,-4,'Luxio','Archfiend of the Ember Throne','Or demons. Which is fair, honestly. So it is up to you. We will be right behind you. Somewhat behind you.']]},COR(),
+  ARN({name:'the Spire’s Root',dress:'corinth',g:[['hatchling',4],['paragon',1],['seraphling',2]],say:['lucia','They fight like us, and like Luxio, and like neither. Higher. The Choir’s Bell hangs in the western belfry.']}),COR(),
+  ARN({name:'the Hall of Two Voices',dress:'corinth',g:[['chorister',2],['paragon',2],['hatchling',3],['brimbrute',1]],alt:{side:'W',title:'The Belfry',relic:'the Choir’s Bell',altar:'Ring the Choir’s Bell',hard:1,say:['luxio','Hear that chord? Gold and fire in the same note. They are not asking us to leave anymore. They are inviting us up.']},chest:2}),COR(),
+  RFT({name:'the Singing Rift',dress:'corinth',n:4,g:[['chorister',1],['hatchling',4],['paragon',1]],say:['lucia','The rift falls quiet. Their champion is waiting on the terrace. It wants a fair fight.']}),COR(),
+  ARN({name:'the Terrace of Neither',dress:'corinth',g:[['paragon',3],['chorister',2],['hatchling',4],['halowarden',1],['imp',2]],chest:1}),COR(),
+  BOS({kind:'seraxis',hp:3000,tag:'seraxis',dress:'corinth',say:['luxio','Paragon Seraxis. Half Lucia’s blade, half mine. Show it what the Codex can do!']})]},
+ ch14:{seed:141,paint:1,paintC:1,wall:'dwall2',tag:'corinth',segs:[
+  {t:'entry',npc:[['lucia',-12,-4,'Lucia','Seraph of the Dawn','Whatever Corinth is, Luxio and I made it, one clash at a time. We owe it an answer.'],['luxio',12,-4,'Luxio','Archfiend of the Ember Throne','We owe it a lot of things. Let’s start with a fight. It is how our family talks.'],['aurealius',0,-8,'Aurealius','Keeper of the Codex','Aurealius holds the Codex open to a blank page. "Whatever happens up there," he says, "this page will remember it."']]},COR(),
+  ARN({name:'the Blank Steps',dress:'corinth',g:[['paragon',2],['hatchling',4],['seraphling',2],['imp',2]],say:['lucia','The sky is unwritten here. Every step we take, the page writes a little more.']}),COR(),
+  ARN({name:'the Margin of Heaven',dress:'empyrean',g:[['halowarden',2],['choir',2],['seraphling',3],['paragon',1]],alt:{side:'E',title:'The Gilded Margin',relic:'the Quill of Light',altar:'Set down the Quill of Light',hard:1,say:['lucia','Heaven gives its quill. One more.']},chest:2}),COR(),
+  ARN({name:'the Margin of Hell',dress:'abyss',g:[['brimbrute',2],['cinderwitch',2],['hellhound',2],['paragon',1]],alt:{side:'W',title:'The Ember Margin',relic:'the Quill of Fire',altar:'Set down the Quill of Fire',hard:1,say:['luxio','Hell gives its quill. Now the page can be written in both colours.']},chest:1}),COR(),
+  RFT({name:'the Unwritten Rift',dress:'corinth',n:5,g:[['chorister',2],['hatchling',4],['paragon',2]],say:['lucia','It is waiting at the top. It is not angry. Somehow that is worse.']}),COR(),
+  BOS({kind:'corinth',hp:4200,tag:'corinth',dress:'corinth',say:['luxio','Corinth, the First of the New. Neither of us. Both of us. Let’s see what you are made of!']})]}};
+Object.assign(LAYOUT,L2);
+const sc_=(A,R,rng,kinds,n,o)=>scatter(A,R,rng,kinds,n,o||{});
+Object.assign(DRESS,{
+ empyrean(A,R,rng,o){const cz=(R.z0+R.z1)/2,ar=(R.x1-R.x0)*(R.z1-R.z0);for(const z of rows(R,9)){A('marblecol',R.x0+2.5,z);A('marblecol',R.x1-2.5,z)}sc_(A,R,rng,['feathers','feathers','crystals','seraphstat'],Math.round(ar/90),{minX:8});
+  A('halorun',o.i%2?-9:9,cz);if(o.i%3===1)A('pearlgate',0,R.z0+5,{});A('seraphstat',R.x0+6,R.z1-5,{r:.5});A('seraphstat',R.x1-6,R.z1-5,{r:-.5})},
+ abyss(A,R,rng,o){const cz=(R.z0+R.z1)/2,ar=(R.x1-R.x0)*(R.z1-R.z0);for(const z of rows(R,8)){A('chainpyl',R.x0+2,z);A('chainpyl',R.x1-2,z)}sc_(A,R,rng,['hellspire','hellspire','rubble','bones','skullpole'],Math.round(ar/85),{minX:8});
+  A('brimpit',o.i%2?9:-9,cz);if(o.i%2===0)A('hornarch',0,R.z0+4,{});A('brimpit',R.x0+6,R.z1-6)},
+ schism(A,R,rng,o){const cz=(R.z0+R.z1)/2,ar=(R.x1-R.x0)*(R.z1-R.z0);A('riftscar',o.i%2?-8:8,cz-2);A('fallenwing',o.i%2?9:-9,cz+6,{r:rng()*6.28});sc_(A,R,rng,['marblecol','hellspire','feathers','emberbloom','rubble'],Math.round(ar/85),{minX:8});
+  A('seraphstat',R.x0+5,R.z1-5,{r:.5});A('hellspire',R.x1-5,R.z1-5)},
+ cloister(A,R,rng,o){const cz=(R.z0+R.z1)/2,ar=(R.x1-R.x0)*(R.z1-R.z0);for(const z of rows(R,6)){A('bookshelf',R.x0+2.2,z,{r:Math.PI/2});A('bookshelf',R.x1-2.2,z,{r:-Math.PI/2})}sc_(A,R,rng,['feathers','emberbloom','marblecol','brazier','rubble'],Math.round(ar/80),{minX:8});
+  A('halorun',o.i%2?9:-9,cz);A('fallenwing',o.i%2?-9:9,cz+5,{r:rng()*6.28})},
+ gilded(A,R,rng,o){const cz=(R.z0+R.z1)/2,ar=(R.x1-R.x0)*(R.z1-R.z0);for(const z of rows(R,9)){A('chainpyl',R.x0+2,z);A('marblecol',R.x1-2.5,z)}sc_(A,R,rng,['hellspire','brimpit','feathers','seraphstat','rubble'],Math.round(ar/90),{minX:8});
+  A('halorun',o.i%2?-9:9,cz);A('hornarch',0,R.z0+4,{})},
+ corinth(A,R,rng,o){const cz=(R.z0+R.z1)/2,ar=(R.x1-R.x0)*(R.z1-R.z0);for(const z of rows(R,10)){A('corobelisk',R.x0+2.5,z,{r:Math.PI/2});A('corobelisk',R.x1-2.5,z,{r:-Math.PI/2})}sc_(A,R,rng,['emberbloom','emberbloom','feathers','riftscar'],Math.round(ar/85),{minX:8});
+  A('riftscar',o.i%2?9:-9,cz);A('fallenwing',o.i%2?-9:9,cz+6,{r:rng()*6.28})}});
+{const _g=genChapter;genChapter=function(C){const sc=_g.apply(this,arguments);try{if(C.book===2&&sc.quest)sc.quest.chapter='BOOK II · CHAPTER '+ROMAN[C.n]}catch(e){}return sc}}
+/* the chapter list shows the two books */
+(function(){const s=document.createElement('style');s.textContent='.cs-book{font:800 11px/1 var(--f,system-ui);letter-spacing:.22em;color:#ffd98a;padding:12px 6px 6px;text-transform:uppercase;opacity:.9}.cs-book.b2{color:#ffb070;border-top:1px solid #ffffff22;margin-top:6px}';document.head.appendChild(s)})();
+{const _r=renderChapters;renderChapters=function(){_r.apply(this,arguments);try{const el=$('chsel');const L=el.querySelector('.cs-list');if(!L)return;const c1=L.querySelector('[data-id="ch1"]'),c8=L.querySelector('[data-id="ch8"]');
+  if(c1&&!L.querySelector('.cs-book')){const h=document.createElement('div');h.className='cs-book';h.textContent='Book I · The Neon Codex';L.insertBefore(h,c1)}
+  if(c8&&!L.querySelector('.cs-book.b2')){const h=document.createElement('div');h.className='cs-book b2';h.textContent='Book II · The Rise of the Corinthians';L.insertBefore(h,c8)}
+  const C=CHI[CSEL];if(C&&C.book===2){const k=el.querySelector('.cs-k');if(k)k.textContent='BOOK II · CHAPTER '+ROMAN[C.n];const b=el.querySelector('.cs-det button.pb[disabled]');if(b&&C.n===8)b.textContent='🔒 Finish Book I · Chapter III to unlock'}}catch(e){}}}
+/* Lucia and Luxio wait in the hub near the chapter portal */
+{const _e=ensureChapters;ensureChapters=function(){const r=_e.apply(this,arguments);try{const hub=DB.scenes.hub;if(hub&&!hub.objs.some(o=>o.k==='npc'&&o.d&&o.d.hero==='lucia')){const A=adder(hub);
+  A('npc',-11,-21,{r:fc(-11,-21),d:{hero:'lucia',name:'Lucia',title:'Seraph of the Dawn',text:'Book II of the Codex has begun: The Rise of the Corinthians. Heaven is cracked and Hell is open. Open the chapter list when you are ready, and fly with me.'}});
+  A('npc',11,-21,{r:fc(11,-21),d:{hero:'luxio',name:'Luxio',title:'Archfiend of the Ember Throne',text:'Seven new chapters, seven new arenas, and a lot of things that need burning. Lucia will tell you it is my fault. Lucia is wrong. Mostly.'}})}}catch(e){}return r}}
+
+/* =====================================================================  STORE · entitlements, promo, coupon, designs  */
+const CFG=window.NCA_CONFIG||{};
+const ITEMS={champ_lucia:{n:'Lucia',price:'$5.99',heroes:['lucia']},champ_luxio:{n:'Luxio',price:'$5.99',heroes:['luxio']},bundle_corinth:{n:'Corinthian Bundle',price:'$10.99',heroes:['lucia','luxio'],skins:['lucia','luxio']}};
+const ENTK='ncaEnt';
+let ENT={heroes:{},skins:{},all:0};try{ENT=Object.assign(ENT,JSON.parse(localStorage.getItem(ENTK)||'{}'))}catch(e){}
+function mergeEnt(e,why){if(!e)return;let ch=false;for(const k in e.heroes||{})if(!ENT.heroes[k]){ENT.heroes[k]=1;ch=true}for(const k in e.skins||{})if(!ENT.skins[k]){ENT.skins[k]=1;ch=true}if(e.all&&!ENT.all){ENT.all=1;ch=true}
+ try{localStorage.setItem(ENTK,JSON.stringify(ENT))}catch(x){}if(ENT.all)applyAll();if(ch){try{const hs=document.getElementById('hsel');if(hs&&hs.classList.contains('on'))renderHeroSel(false)}catch(x){}try{if(PRO.on)renderPromo()}catch(x){}
+  if(why==='purchase')toast('<b>Thank you!</b><br>Your Corinthian champions are unlocked.');else if(why==='coupon')toast('<b>Code accepted</b><br>Every champion is unlocked, Lucia and Luxio included.')}}
+function applyAll(){try{if(typeof PROG==='undefined')return;PROG._unl=PROG._unl||{};let ch=false;for(const k in UNL.PRICE)if(!PROG._unl[k]){PROG._unl[k]=1;ch=true}if(ch)saveProg()}catch(e){}}
+const owns=k=>!!(ENT.all||ENT.heroes[k]);
+const ownsSkin=k=>!!(ENT.all||ENT.skins[k]);
+/* locked: premium champions need the purchase (or the coupon); the code also opens every ★-locked champion */
+{const _l=UNL.locked;UNL.locked=k=>{if(PREM.includes(k))return!owns(k);if(ENT.all&&UNL.PRICE[k]!==undefined)return false;return _l(k)}}
+{const _b=UNL.buy;UNL.buy=k=>{if(PREM.includes(k)){openPromo(k);return false}return _b(k)}}
+/* entitlements from the server: websocket (Multiplayer) and HTTP (Campaign, if this device ever signed in) */
+try{NET.on_('welcome',m=>{if(m&&m.ent)mergeEnt(m.ent)});NET.on_('msg:ent',m=>mergeEnt(m.ent,m.why));NET.on_('msg:redeemed',m=>{RED.busy=false;if(m.ok)mergeEnt(m.ent,'coupon');else redeemMsg(m.error||'That code is not valid.',1)})}catch(e){}
+function pullEnt(){try{const a=NET.acct&&NET.acct(),u=NET.httpUrl&&NET.httpUrl();if(!a||!a.token||!u)return;fetch(u+'/ent',{headers:{'x-token':a.token}}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.ent)mergeEnt(j.ent)}).catch(()=>{})}catch(e){}}
+setTimeout(pullEnt,4000);
+function buyItem(sku){const it=ITEMS[sku];if(!it)return;
+ if(WIX.test){if(typeof NET!=='undefined'&&NET.authed){NET.send({t:'devbuy',sku});toast('Test purchase: '+it.n)}else toast('Test purchases need a Multiplayer connection.','bad');return}
+ if(WIX.embedded){WIX.cb=r=>{if(r&&r.ok){toast('Purchase complete. Unlocking…');setTimeout(()=>{try{NET.authed?NET.send({t:'ent'}):pullEnt()}catch(e){}},1500)}else toast((r&&r.error)||'Payment was not completed.','bad')};
+  try{window.parent.postMessage({source:'nca',type:'buy',sku,item:1,price:it.price},'*')}catch(e){toast('Could not reach the store.','bad')}return}
+ if(CFG.shopUrl){window.open(CFG.shopUrl+(CFG.shopUrl.includes('?')?'&':'?')+'sku='+encodeURIComponent(sku),'_blank','noopener');toast('The store opened in a new tab. Your champions unlock as soon as the payment clears.');return}
+ toast('Purchases open in the official (Wix-hosted) version of the game. You can also use a code in the Champions menu.','bad')}
+/* coupon (server-checked) */
+const RED={busy:false};
+function redeemMsg(t,bad){const e=document.getElementById('c7-rmsg');if(e){e.textContent=t;e.className=bad?'bad':'ok'}if(bad)toast(t,'bad')}
+function redeem(code){code=String(code||'').trim();if(!code){redeemMsg('Enter a code.',1);return}if(RED.busy)return;RED.busy=true;redeemMsg('Checking…');
+ try{if(NET.authed){NET.send({t:'redeem',code});setTimeout(()=>{if(RED.busy){RED.busy=false;redeemMsg('The server did not answer. Try again.',1)}},6000);return}
+  const u=NET.httpUrl&&NET.httpUrl();if(!u){RED.busy=false;redeemMsg('Codes are checked by the game server, and none is configured.',1);return}const a=NET.acct&&NET.acct(),h={'content-type':'application/json'};if(a&&a.token)h['x-token']=a.token;
+  fetch(u+'/redeem',{method:'POST',headers:h,body:JSON.stringify({code})}).then(r=>r.json().catch(()=>({ok:false}))).then(j=>{RED.busy=false;if(j&&j.ok){mergeEnt(j.ent,'coupon');redeemMsg(j.account?'Unlocked on your account.':'Unlocked on this device.')}else redeemMsg((j&&j.error)||'That code is not valid.',1)}).catch(()=>{RED.busy=false;redeemMsg('Could not reach the game server.',1)})}
+ catch(e){RED.busy=false;redeemMsg('Could not reach the game server.',1)}}
+/* designs (Dawnbreaker / Eclipse Seraph, Hellbrand / Ashen Tyrant) */
+function setDesign(k,v){if(v&&!ownsSkin(k)){openPromo(k);return}const S=SKINS[k][v];Hero.pals[k]=Object.assign({},S.pal,{v});if(Hero.key===k&&heroG){try{const old=heroG;killTrails();SC.remove(old);HUB.disposeTree(old);heroG=null;ensureHero();heroG.visible=!!playOn}catch(e){}}
+ HTH[k]=null;PRO.th={};try{saveProg()}catch(e){}try{if(typeof NET!=='undefined'&&NET.mp&&NET.mp())NET.appear()}catch(e){}}
+/* the Champions (H) menu: price tags on the premium cards, the code box, the design picker */
+{const _r=renderHeroSel;renderHeroSel=function(first){_r.apply(this,arguments);try{const el=$('hsel');
+  for(const k of PREM){const c=el.querySelector('.hc[data-k="'+k+'"]');if(!c)continue;const pr=c.querySelector('.hc-pr'),b=c.querySelector('[data-pick]');if(!owns(k)){if(pr)pr.innerHTML='💎 $5.99 · or both in the bundle for $10.99';if(b){b.textContent='💎 Unlock '+KITS[k].name;b.classList.remove('ghost')}}
+   const n=c.querySelector('.hc-n');if(n&&!n.querySelector('.c7-b2'))n.insertAdjacentHTML('beforeend','<i class="c7-b2">BOOK II</i>')}
+  const col=el.querySelector('.hs-col');if(col&&!el.querySelector('.c7-code')){const k=Hero.key;let des='';
+   if(PREM.includes(k))des=`<div class="c7-des"><div class="hs-cl">Design · ${KITS[k].name}</div>${SKINS[k].map((s,i)=>`<button class="pb sm ${curV(k)===i?'':'ghost'}" data-c7v="${i}">${i&&!ownsSkin(k)?'💎 ':''}${s.n} <small>· ${s.w}</small></button>`).join('')}</div>`;
+   col.insertAdjacentHTML('beforeend',`${des}<div class="c7-code"><div class="hs-cl">Have a code?</div><div class="c7-row"><input id="c7-code" maxlength="24" placeholder="Enter code" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="pb sm" id="c7-red">Redeem</button></div><div id="c7-rmsg"></div><button class="pb sm ghost" id="c7-store">💎 Corinthian champions</button></div>`);
+   const inp=el.querySelector('#c7-code');inp.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter')redeem(inp.value)});inp.addEventListener('keyup',e=>e.stopPropagation());
+   el.querySelector('#c7-red').addEventListener('click',e=>{e.stopPropagation();redeem(inp.value)});el.querySelector('#c7-store').addEventListener('click',e=>{e.stopPropagation();openPromo()});
+   el.querySelectorAll('[data-c7v]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();setDesign(k,+b.dataset.c7v);renderHeroSel(first)}))}}catch(e){console.warn('[corinth] hsel',e)}}}
+
+/* ----- the promotional splash ----- */
+const PRO={on:false,th:{},sel:null};
+const LORE={lucia:{t:'The First Light',s:'Seraph of the Dawn',b:'Before the Order and before the Codex there was a single spark. Lucia is its brightest half: the seraph who carried the Aurealia’s first flame into the Empyrean and forged it into Excalibur. For an age Lucia kept Heaven’s high gates. When the Codex burned its last page the gates cracked, and Lucia descended through the rift with healing light in one hand and holy fire in the other, to find the one being who shares that spark.',
+  k:['Flight: hover out of melee reach and rain feather-fire','Seraph Dive: a falling-star strike that heals','Excalibur’s Judgement, Halo of Mending, Sun’s Sanctuary']},
+ luxio:{t:'The First Flame',s:'Archfiend of the Ember Throne',b:'Luxio is the spark’s other half: the fire that does not warm, it consumes. Cast down when the realms were first divided, Luxio built the Ember Throne in the Abyss and tempered the red blade Ruinbrand in its furnace. The fracture tore Hell’s ceiling open, and Luxio rose on wings of cinder to settle an argument older than the stars, and to burn down whatever stands in the way.',
+  k:['Flight: bomb foes with exploding hellfire','Meteor Fall: crash down and leave a burning crater','Ruinbrand Cleave, Brimstone Rain, Hellbrand, Cataclysm']}};
+function portrait(k,v){const key=k+v;if(PRO.th[key])return PRO.th[key];try{thumbInit();const g=buildChar(k,Object.assign({},palFor(k),hexPal(SKINS[k][v].pal)));const R=g.userData.rig;setVar(R,v);if(R.wings){R.wings.k=.7;wingPose(R.wings,1.1)}HUB.poseApply(R,Object.assign(HUB.PZ(),H.STANCE[k]||{}));g.rotation.y=k==='lucia'?.5:-.5;g.traverse(o=>{if(o.userData.anim&&o!==R.wings.L)o.userData.anim(o,1.3)});return PRO.th[key]=thumbOf(g,360)}catch(e){console.warn(e);return''}}
+const hexPal=p=>{const o={};for(const r in p)o[r]=p[r];return o};
+function openPromo(focus){PRO.on=true;PRO.sel=focus||null;let el=document.getElementById('c7pro');if(!el){el=document.createElement('div');el.id='c7pro';document.body.appendChild(el);el.addEventListener('click',onPromo);el.addEventListener('keydown',e=>e.stopPropagation())}
+ el.classList.add('on');renderPromo();try{window.__c7prev=window.__pause;window.__pause=true}catch(e){}}
+function closePromo(){PRO.on=false;const el=document.getElementById('c7pro');if(el)el.classList.remove('on');try{window.__pause=window.__c7prev||false}catch(e){}}
+function card(k){const L=LORE[k],o=owns(k),K=KITS[k];return`<div class="c7c ${k}"><div class="c7p"><img src="${portrait(k,0)}" alt=""><img class="alt" src="${portrait(k,1)}" alt=""></div><div class="c7i"><div class="c7k">${L.t}</div><div class="c7n">${K.name}</div><div class="c7s">${L.s}</div><p>${L.b}</p><ul>${L.k.map(x=>`<li>${x}</li>`).join('')}</ul>
+  ${o?`<button class="pb sm" data-c7play="${k}">✓ Owned · Play as ${K.name}</button>`:`<button class="pb sm" data-c7buy="champ_${k}">Unlock ${K.name} · $5.99</button>`}</div></div>`}
+function renderPromo(){const el=document.getElementById('c7pro');if(!el)return;const both=owns('lucia')&&owns('luxio'),sk=ownsSkin('lucia')&&ownsSkin('luxio');
+ el.innerHTML=`<div class="c7w"><button class="x" data-c7x>×</button><div class="c7h"><div class="c7e">NEW · BOOK II OF THE CODEX</div><div class="c7t">THE RISE OF THE CORINTHIANS</div><div class="c7u">Heaven cracked. Hell broke open. Where the twin halves of the first spark clash, something new is born: neither good nor evil. Simply new, and powerful. Seven new chapters in seven new arenas.</div></div>
+ <div class="c7g">${card('lucia')}<div class="c7bund"><div class="c7k">BEST VALUE</div><div class="c7n">Corinthian Bundle</div><div class="c7pr">$10.99</div><ul><li>Lucia and Luxio</li><li>Eclipse Seraph design with the Caliburn Nova blade</li><li>Ashen Tyrant design with the Oblivion Fang blade</li><li>Save $0.99</li></ul>${sk?'<button class="pb sm" disabled>✓ Bundle owned</button>':`<button class="pb" data-c7buy="bundle_corinth">Get the bundle · $10.99</button>`}<small>Book II chapters are free for every player.</small></div>${card('luxio')}</div>
+ <div class="c7f"><button class="pb sm ghost" data-c7ch>Open Book II chapters</button><button class="pb sm ghost" data-c7x>${both?'Close':'Not now'}</button></div></div>`}
+function onPromo(e){const t=e.target;if(t.id==='c7pro'||t.closest('[data-c7x]')){closePromo();return}const b=t.closest('[data-c7buy]');if(b){buyItem(b.dataset.c7buy);return}
+ const p=t.closest('[data-c7play]');if(p){closePromo();try{setHeroKey(p.dataset.c7play)}catch(x){}return}if(t.closest('[data-c7ch]')){closePromo();try{openChapters('ch8')}catch(x){}}}
+/* show it once per session when a player enters Campaign or signs in to Multiplayer (skip if they own everything) */
+const noPromo=(()=>{try{return new URLSearchParams(location.search).get('nopromo')==='1'}catch(e){return false}})();
+let promoWait=setInterval(()=>{try{if(noPromo){clearInterval(promoWait);return}if(typeof PROF==='undefined'||!PROF.chosen)return;const key='ncaPromo_'+PROF.cur;if(sessionStorage.getItem(key)){clearInterval(promoWait);return}
+  const ready=PROF.cur==='mp'?(typeof NET!=='undefined'&&NET.authed):(typeof playOn!=='undefined'&&(playOn||document.body.classList.contains('hsel')));if(!ready)return;
+  clearInterval(promoWait);sessionStorage.setItem(key,'1');if(ownsSkin('lucia')&&ownsSkin('luxio'))return;setTimeout(()=>openPromo(),1400)}catch(e){}},1000);
+
+/* ----- styles (desktop + touch) ----- */
+const css=document.createElement('style');css.textContent=`
+#c7hud{position:fixed;left:16px;top:176px;z-index:11;pointer-events:none;display:none;font:700 12px/1.25 system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000;letter-spacing:.05em}
+#c7hud.on{display:block}#c7hud .c7t{text-transform:uppercase;margin-bottom:4px}#c7hud .c7b{width:190px;height:9px;border-radius:5px;background:#000a;overflow:hidden;border:1px solid #ffffff33}#c7hud .c7b i{display:block;height:100%}
+html.mob #c7hud{left:50%;top:140px;transform:translateX(-50%);text-align:center}html.mob #c7hud .c7b{margin:0 auto;width:calc(var(--u)*190)}
+.hc-n .c7-b2{font-style:normal;font-size:9px;letter-spacing:.12em;margin-left:6px;padding:2px 5px;border-radius:6px;background:linear-gradient(90deg,#ffd98a,#ff6a2a);color:#1a0c08;vertical-align:middle}
+.c7-des,.c7-code{margin-top:10px}.c7-des .pb{margin:3px 4px 0 0}.c7-des small{opacity:.7}.c7-row{display:flex;gap:6px;align-items:center}
+#c7-code{flex:1;min-width:0;padding:8px 10px;border-radius:9px;border:1px solid #ffffff33;background:#0b1024;color:#fff;font:700 13px system-ui;letter-spacing:.12em;text-transform:uppercase}
+#c7-rmsg{min-height:16px;font:600 12px system-ui;margin:4px 0}#c7-rmsg.ok{color:#6dffb4}#c7-rmsg.bad{color:#ff8a8a}#c7-store{margin-top:4px}
+#c7pro{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at 30% 20%,#ffd98a22,transparent 55%),radial-gradient(ellipse at 70% 80%,#ff3a1a22,transparent 55%),#05060ee8;backdrop-filter:blur(4px);font-family:system-ui,sans-serif;color:#fff}
+#c7pro.on{display:flex}
+#c7pro .c7w{position:relative;width:min(1180px,96vw);max-height:94vh;overflow:auto;padding:22px 26px;border-radius:20px;background:linear-gradient(160deg,#141a34f2,#0b0c18f2);border:1px solid #ffffff22;box-shadow:0 30px 80px #000c}
+#c7pro .x{position:absolute;right:12px;top:10px;width:38px;height:38px;border-radius:50%;border:1px solid #ffffff33;background:#0008;color:#fff;font-size:22px;cursor:pointer}
+#c7pro .c7h{text-align:center;margin-bottom:14px}#c7pro .c7e{font:800 11px system-ui;letter-spacing:.3em;color:#ffb070}
+#c7pro .c7t{font:900 clamp(20px,3.4vw,38px)/1.1 Georgia,serif;letter-spacing:.12em;background:linear-gradient(90deg,#fff0c0,#ffc94a 40%,#ff6a2a 60%,#ff3a1a);-webkit-background-clip:text;background-clip:text;color:transparent;margin:6px 0}
+#c7pro .c7u{max-width:760px;margin:0 auto;font-size:13px;opacity:.85;line-height:1.45}
+#c7pro .c7g{display:grid;grid-template-columns:1fr 250px 1fr;gap:16px;align-items:stretch}
+#c7pro .c7c{display:flex;flex-direction:column;border-radius:16px;padding:12px;background:linear-gradient(180deg,#ffffff0d,#ffffff05);border:1px solid #ffffff1c}
+#c7pro .c7c.lucia{box-shadow:inset 0 0 40px #ffd98a18;border-color:#ffd98a44}#c7pro .c7c.luxio{box-shadow:inset 0 0 40px #ff3a1a18;border-color:#ff3a1a44}
+#c7pro .c7p{display:flex;justify-content:center;gap:4px;height:190px}#c7pro .c7p img{height:100%;object-fit:contain;filter:drop-shadow(0 6px 18px #0009)}#c7pro .c7p img.alt{height:72%;align-self:flex-end;opacity:.9}
+#c7pro .c7k{font:800 10px system-ui;letter-spacing:.24em;color:#ffb070;text-transform:uppercase}#c7pro .c7n{font:900 26px Georgia,serif;letter-spacing:.06em}#c7pro .c7s{font:700 11px system-ui;letter-spacing:.16em;text-transform:uppercase;opacity:.75;margin-bottom:6px}
+#c7pro .c7c.lucia .c7n{color:#ffe7a8}#c7pro .c7c.luxio .c7n{color:#ff7a5a}
+#c7pro p{font-size:12.5px;line-height:1.45;opacity:.88;margin:4px 0 6px}#c7pro ul{margin:0 0 10px;padding-left:18px;font-size:12px;line-height:1.5;opacity:.9}
+#c7pro .c7i{display:flex;flex-direction:column;flex:1}#c7pro .c7i .pb{margin-top:auto}
+#c7pro .c7bund{display:flex;flex-direction:column;justify-content:center;text-align:center;border-radius:16px;padding:16px 12px;background:linear-gradient(170deg,#ffd98a26,#ff3a1a26);border:1px solid #ffc94a66}
+#c7pro .c7bund ul{text-align:left}#c7pro .c7pr{font:900 40px Georgia,serif;color:#ffd98a;margin:4px 0 8px}#c7pro .c7bund small{opacity:.7;margin-top:8px;font-size:11px}
+#c7pro .c7f{display:flex;justify-content:center;gap:10px;margin-top:14px}
+html.mob #c7pro .c7w{padding:calc(var(--u)*12) calc(var(--u)*14);max-height:96vh;width:98vw}
+html.mob #c7pro .c7g{grid-template-columns:1fr calc(var(--u)*200) 1fr;gap:calc(var(--u)*10)}
+html.mob #c7pro .c7p{height:104px}html.mob #c7pro p{font-size:10.5px;line-height:1.35}html.mob #c7pro ul{font-size:10px;margin-bottom:6px}html.mob #c7pro .c7n{font-size:20px}html.mob #c7pro .c7pr{font-size:30px}
+html.mob #c7pro .c7u{font-size:11px}html.mob #c7pro .c7t{font-size:24px}html.mob #c7pro .c7h{margin-bottom:8px}html.mob #c7pro .x{width:calc(var(--u)*44);height:calc(var(--u)*44)}
+html.mob #c7pro .pb{min-height:calc(var(--u)*40)}
+@media (max-width:760px){html:not(.mob) #c7pro .c7g{grid-template-columns:1fr}}`;document.head.appendChild(css);
+
+return{PREM,ITEMS,SKINS,ENT:()=>ENT,mergeEnt,openPromo,closePromo,redeem,buyItem,setDesign,owns,ownsSkin,flying,land,setVar,B2,props:Object.keys(P_),enemies:Object.keys(NE2),bosses:Object.keys(BOSSD)}})();
 </script>
 <script id="nca-atlas">
 /* ============ ATLAS · the Hub Atlas — a showcase of every player's published hub (Campaign + Multiplayer) ============
