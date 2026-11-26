@@ -74,6 +74,20 @@ function post(p, body, sig) { return new Promise(res => { const r = http.request
     c3.send({ t: 'ready', op: 'answer', ok: true }); const go = await A.wait(m => m.t === 'go'); await b.wait(m => m.t === 'go'); await c3.wait(m => m.t === 'go'); ok(go.inst.startsWith('p:'), 'all accepted → everyone transported: ' + go.inst);
     for (const c of [A, b, c3]) c.send({ t: 'join', scene: 'ch1', inst: go.inst }); const ri = await c3.wait(m => m.t === 'room' && m.scene === 'ch1'); await sleep(200);
     ok(ri.room === go.inst, 'party shares an instance room'); const outsider = await login(URL, 'Dave'); outsider.send({ t: 'join', scene: 'ch1', inst: go.inst }); const od = await outsider.wait(m => m.t === 'notice'); ok(/not open/.test(od.text), 'outsider cannot join party instance');
+    console.log('shared enemies (co-op relay)');
+    const ids = [A.w.id, b.w.id, c3.w.id], hostId = ri.host; ok(ids.includes(hostId), 'instance room names a host');
+    const byId = { [A.w.id]: A, [b.w.id]: b, [c3.w.id]: c3 }, H = byId[hostId], G = [A, b, c3].filter(x => x !== H);
+    for (const x of [A, b, c3]) x.clear();
+    H.send({ t: 'co', d: { k: 's', e: [[1, 2.5, 0, 3, 0, 40, 0, 'run', 0]] } }); const cg1 = await G[0].wait(m => m.t === 'co'), cg2 = await G[1].wait(m => m.t === 'co');
+    ok(cg1.from === hostId && cg2.d.e[0][5] === 40, 'host snapshot reaches every guest, stamped with the host id'); await sleep(80); ok(!H.last('co'), 'sender does not get its own snapshot back');
+    G[0].send({ t: 'co', d: { k: 'h', hs: [[1, 25, 0, 0, 0, 0]] }, to: hostId }); const chh = await H.wait(m => m.t === 'co' && m.d.k === 'h'); await sleep(80);
+    ok(chh.from === G[0].w.id && chh.d.hs[0][1] === 25 && !G[1].log.some(m => m.t === 'co' && m.d.k === 'h'), 'a guest hit goes to the host only');
+    G[0].send({ t: 'co', d: { k: 'h', hs: [] }, to: outsider.w.id }); await sleep(80); ok(!outsider.last('co'), 'co cannot be aimed at someone outside the room');
+    G[1].send({ t: 'fx', p: [1, 0, 2], b: [['d', 3, 2, 1, 1]] }); const cfx1 = await H.wait(m => m.t === 'fx'); await G[0].wait(m => m.t === 'fx'); ok(cfx1.from === G[1].w.id && cfx1.b[0][0] === 'd', 'effects / prop smashes relay to the room');
+    const png = await (async () => { A.send({ t: 'ping', ts: 5 }); return A.wait(m => m.t === 'pong'); })(); ok(png.ts === 5 && png.now > 0, 'pong carries server time');
+    for (const x of G) x.clear(); H.send({ t: 'join', scene: 'hub' }); const cho = await G[0].wait(m => m.t === 'host'); await G[1].wait(m => m.t === 'host');
+    ok(cho.id !== hostId && G.some(x => x.w.id === cho.id), 'host leaving hands the enemies to a teammate');
+    H.send({ t: 'join', scene: 'ch1', inst: go.inst }); const cback = await H.wait(m => m.t === 'room' && m.room === go.inst); ok(cback.host === cho.id, 'returning player rejoins as a guest of the new host');
     A.send({ t: 'ready', op: 'start', dest: { type: 'chapter', scene: 'ch2' } }); await b.wait(m => m.t === 'ready' && m.dest.scene === 'ch2'); b.send({ t: 'ready', op: 'answer', ok: false }); const re = await A.wait(m => m.t === 'ready_end'); ok(re.reason === 'declined', 'one decline cancels the ready-up');
     c3.send({ t: 'party', op: 'leave' }); await sleep(100); b.send({ t: 'party', op: 'invite', id: outsider.w.id }); await outsider.wait(m => m.t === 'invite'); ok(true, 'leader-less invite flow ok');
     outsider.send({ t: 'party', op: 'accept', id: b.w.id }); await sleep(100);
@@ -100,6 +114,9 @@ function post(p, body, sig) { return new Promise(res => { const r = http.request
     A.send({ t: 'stat', levels: { starr: 7, akira: 3 }, pres: { starr: 2, akira: 99 } }); await sleep(100);
     A.send({ t: 'lb', cat: 'power' }); const lp = await A.wait(m => m.t === 'lb' && m.cat === 'power' && m.rows[0] && m.rows[0].score > 10); ok(lp.rows[0].score === 10 + 30 * (2 + 25), 'prestige counts toward power (and is capped at 25) got ' + lp.rows[0].score);
     A.send({ t: 'appear', hero: 'starr', pal: {}, pr: 7 }); await sleep(120); b.send({ t: 'profile', id: A.w.id }); const pp = await b.wait(m => m.t === 'profile' && m.p.id === A.w.id); ok(pp.p.pres && pp.p.pres.starr === 7, 'appear updates the prestige shown to others');
+    for (const hk of ['rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara']) { A.send({ t: 'appear', hero: hk, pal: {} }); await sleep(60); } b.send({ t: 'profile', id: A.w.id }); const pnh = await b.wait(m => m.t === 'profile' && m.p.id === A.w.id && m.p.hero === 'elara'); ok(pnh.p.hero === 'elara', 'the six new champions are accepted by the server');
+    A.send({ t: 'appear', hero: 'nobody', pal: {} }); await sleep(80); b.clear(); b.send({ t: 'profile', id: A.w.id }); const pn = await b.wait(m => m.t === 'profile' && m.p.id === A.w.id); ok(pn.p.hero === 'elara', 'unknown champion keys are still refused');
+    A.send({ t: 'appear', hero: 'starr', pal: {} }); await sleep(60);
 
     console.log('hub publish');
     A.send({ t: 'hubpub', public: true, scenes: [{ id: 'mine-1', objs: [] }] }); await A.wait(m => m.t === 'hubpub'); b.send({ t: 'hubget', id: A.w.id }); const hd = await b.wait(m => m.t === 'hubdata'); ok(hd.scenes && hd.scenes.length === 1, 'public hub downloadable by others');

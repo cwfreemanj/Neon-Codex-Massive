@@ -228,3 +228,30 @@ objective progress, a Like button and ⟵ Hub.
 * **Storage layout.** `players.json` holds accounts only; big data lives in `saves/<id>.json` (+ `<id>.prev.json` rollback copy),
   `hubs/<id>.json` and `hubs/<id>.jpg`. Old data files are migrated automatically on first start. Hourly snapshots of accounts, guilds and
   orders go to `backups/` (last 72 kept).
+
+## Update: shared enemies & arenas in party play (server half of COOP / FXN)
+Symptom: in a party chapter every player fought their own private copy of the enemies — different positions, health,
+kills and quest progress — and smashed props / effects were not seen by teammates. The game's COOP and FXN modules were
+already in the client, but this server never implemented their half: it dropped every `co` and `fx` message and never
+chose a host. Fixed:
+* **Host election.** Each room has one host (the first member). The host runs the real enemy AI; teammates show puppets that
+  follow the host's snapshots (position, health, animation state, aggro, launches). When the host leaves, the next member is
+  promoted (`{t:'host',id}`), its puppets become live foes and the fight continues. `room` messages now carry `host`.
+* **`co` relay** (shared enemies): to the whole room, or to one member with `to` (guest hits / status effects → host;
+  join state → newcomer), stamped with `from`. 120 msg/s per player, 60 KB per message.
+* **`fx` relay** (attacks, ability effects, projectiles, zones, prop smashes): to the room, stamped with `from`; 40 msg/s, 40 KB.
+* **Destructible props** (barrels, crates, carts, trees, crystals…): smashes are relayed live, and the list of destroyed props
+  is now part of the room's shared progress, so a player who joins late, reconnects or was far away sees the same broken arena.
+* **Kills and quest steps** are shared through the same progress state (kills, flags, step index), so objectives complete
+  together on every screen.
+* Guest hits show on the guest's health bar immediately and are held until the host confirms them (no bounce-back).
+* `pong` carries the server time (`now`) used for clock sync. Fixed a regression where a party ready-check into a player hub
+  always failed (`hub.scenes` moved to per-player files).
+
+## Update: six new champions (Rhoka · Isolde · Cassian · Maeve · Rook · Elara)
+The champion list the server accepts (`HEROES`) now includes `rhoka`, `isolde`, `cassian`, `maeve`, `rook`, `elara`, so these
+champions can be picked, shown to other players, saved with levels / prestige, and sent in `appear` / `hello`. Unknown keys are still
+refused. The `pos` flags field already allowed 0–31; bit 16 now means "Maeve is in bear form" so other players see the werebear.
+No other server change is needed. Redeploy `server.js` together with the new `index.html`.
+In the game (both campaign and multiplayer) the six are locked behind stars like the other newer champions:
+Isolde & Cassian 300★, Rook & Rhoka 450★, Maeve 600★, Elara 750★.

@@ -4911,7 +4911,7 @@ function update(dt){if(!root)return;
    m.position.x+=c.vx*dt;m.position.y+=c.vy*dt;m.position.z+=c.vz*dt;m.rotation.x+=c.sx*dt;m.rotation.y+=c.sy*dt;m.rotation.z+=c.sz*dt;
    const gy=RT.terr.H(m.position.x,m.position.z)+c.half;if(m.position.y<gy){m.position.y=gy;const rs=REST[c.comp]||0;if(c.vy<-1.4&&rs>0){c.vy=-c.vy*rs;c.vx*=.65;c.vz*=.65;c.sx*=.5;c.sy*=.5;c.sz*=.5}else{c.vy=0;c.vx*=Math.exp(-dt*9);c.vz*=Math.exp(-dt*9);c.sx*=.8;c.sy*=.8;c.sz*=.8;if(Math.hypot(c.vx,c.vz)<.25)c.rest=true}}}
   else{m.rotation.x*=1-Math.min(1,dt*6);m.rotation.z*=1-Math.min(1,dt*6)}}}
-return{remote:(i,hits,fx,fz)=>{if(!active())return;sync();const t=T[i];if(!t||t.dead||t.fall)return;RX=true;try{t.cd=0;hurt(t,hits>1?99:1,{big:hits>1},fx,fz)}finally{RX=false}},cone,aoe,line,proj,update,skip,sync,resync:()=>{root=null;sync()},active,T:()=>T,DEF,get chunks(){return CH.length}}})();
+return{gone:()=>{if(active())sync();if(root!==RT.root)return[];const a=[];T.forEach((t,i)=>{if(t.dead||t.fall)a.push(i)});return a},smash:i=>{if(!active())return;sync();const t=T[i];if(!t||t.dead||t.fall)return;RX=true;try{t.cd=0;t.hp=1;hurt(t,99,{big:1},t.x+.01,t.z+1)}finally{RX=false}},remote:(i,hits,fx,fz)=>{if(!active())return;sync();const t=T[i];if(!t||t.dead||t.fall)return;RX=true;try{t.cd=0;hurt(t,hits>1?99:1,{big:hits>1},fx,fz)}finally{RX=false}},cone,aoe,line,proj,update,skip,sync,resync:()=>{root=null;sync()},active,T:()=>T,DEF,get chunks(){return CH.length}}})();
 
 </script>
 <script>
@@ -6592,7 +6592,7 @@ let sendT=0,lastSend='',lastT=0,ray=null;
 O.frame=function(){if(!O.on)return;const t=performance.now(),dt=Math.min(.1,(t-(lastT||t))/1000);lastT=t;nowT+=dt;
  if(typeof playOn==='undefined'||!playOn||typeof P==='undefined')return;
  // our own state, 10 Hz
- sendT+=dt;if(O.authed&&sendT>=.1){sendT=0;const a=(P.roll>0?1:0)|(P.block?2:0)|(P.dead?4:0)|(!P.grounded?8:0),k=P.act&&P.act.clip?String(P.act.clip):'',u=k&&P.act.d?P.act.t/P.act.d:0;
+ sendT+=dt;if(O.authed&&sendT>=.1){sendT=0;const a=(P.roll>0?1:0)|(P.block?2:0)|(P.dead?4:0)|(!P.grounded?8:0)|(P.form==='bear'&&KITS[Hero.key]&&(Hero.key==='maeve'||KITS[Hero.key].base==='maeve')?16:0),k=P.act&&P.act.clip?String(P.act.clip):'',u=k&&P.act.d?P.act.t/P.act.d:0;
   const sig=[P.x.toFixed(1),P.y.toFixed(1),P.z.toFixed(1),P.face.toFixed(2),a,k].join('|');
   if(sig!==lastSend||k||t-(O._ls||0)>1500){lastSend=sig;O._ls=t;O.send({t:'pos',x:P.x,y:P.y,z:P.z,f:P.face,s:P.spd||0,a,k,u,h:Math.round(Math.max(0,Math.min(1,P.hp/(P.max||1)))*100)})}}
  if(!R.size)return;
@@ -7763,7 +7763,7 @@ O.keep=e=>{if(O.rs!=='host')return false;const R=(typeof ROOMS!=='undefined'?ROO
 function flags(e){return(e.aggro?1:0)|(e.stun>0?2:0)|(e.engaged?4:0)}
 function detail(e){return{cn:e.cn,k:e.kind,x:q2(e.x),y:q2(e.y),z:q2(e.z),f:q2(e.f),tag:e.tag||null,key:e.key||null,hp:Math.round(e.hp),mx:Math.round(e.max),dmg:e.dmg,arm:e.arm||0,spd:+(e.spd0||e.spd||1).toFixed(2),
  sc:+(e.sc||1).toFixed(3),r:+(e.r||.5).toFixed(2),h:+(e.h||1.8).toFixed(2),rar:e.rar||0,hc:e.hc||0,bn:e.bname||'',nd:e.noDrop?1:0,el:e.el||null,fl:flags(e),st:e.st||'idle'}}
-function progress(){try{return{kd:PS.killed,i:PS.i,fl:PS.flags}}catch(x){return{}}} /* chests stay personal: everyone loots their own */
+function progress(){try{return{kd:PS.killed,i:PS.i,fl:PS.flags,ds:typeof DST!=='undefined'&&DST.gone?DST.gone():[]}}catch(x){return{}}} /* chests stay personal: everyone loots their own */
 /* =====================================================================================================  HOST  */
 function assign(){let n=0;const fresh=[];for(const e of ENEM){if(e.dead||e.dummy||e.cn!=null||e.pup||!e.g)continue;e.cn=++O.seq;O.byCn.set(e.cn,e);fresh.push(e);n++}return fresh}
 function hostFrame(dt){
@@ -7847,8 +7847,9 @@ function silentStep(s){try{for(const gt of OB.gates)if(gt.o.d.until===s.id)openG
 function worldSync(){try{
  for(const r of OB.relics)if(r.g.visible!==false&&PS.flags['collect:'+r.o.d.tag]){r.g.visible=false;sparks.emit(r.o.x,r.g.position.y+1.2,r.o.z,0xffc94a,24,6,.3,.9,-3)}
  for(const a of ANCH)if(!a.dead&&PS.killed[a.o.id]){a.dead=true;a.g.visible=false;RT.hidden.add(a.o.id);buildCols();sparks.emit(a.o.x,a.g.position.y+2,a.o.z,0xb36bff,30,7,.35,1,-4)}}catch(x){console.error('coop worldSync',x)}}
-const psig=()=>{try{return Object.keys(PS.killed).length+'|'+Object.keys(PS.flags).length+'|'+PS.i+'|'+(PS.done?1:0)}catch(x){return''}};
+const psig=()=>{try{return Object.keys(PS.killed).length+'|'+Object.keys(PS.flags).length+'|'+PS.i+'|'+(PS.done?1:0)+'|'+(typeof DST!=='undefined'&&DST.gone?DST.gone().length:0)}catch(x){return''}};
 function mergeProgress(d,first){if(!d||typeof PS==='undefined'||!PS)return;let ch=false;const Q=S&&S.quest;
+ if(Array.isArray(d.ds)&&d.ds.length&&typeof DST!=='undefined'&&DST.smash){try{const have=new Set(DST.gone());for(const i of d.ds)if(typeof i==='number'&&!have.has(i))DST.smash(i)}catch(x){console.error('coop props',x)}}
  if(d.kd){if(first)PS.killed=Object.assign({},d.kd);else for(const k in d.kd)if(!PS.killed[k]){PS.killed[k]=d.kd[k];ch=true}}
  if(d.fl)for(const k in d.fl)if(PS.flags[k]===undefined){PS.flags[k]=d.fl[k];ch=true}
  // joining a room that is already part-way through: catch up silently (no toast storm, no repeated rewards)
@@ -7862,7 +7863,7 @@ function mergeProgress(d,first){if(!d||typeof PS==='undefined'||!PS)return;let c
 /* every 0.4 s: if our progress changed (we collected the relic, used the altar, reached a zone …) tell the room */
 function progTick(dt){if(O.rs==='solo'||(O.rs==='guest'&&!O.got))return;O.pgT=(O.pgT||0)+dt;if(O.pgT<.4)return;O.pgT=0;const s=psig();if(s===O.pgSig)return;O.pgSig=s;
  if(O.rs==='guest')sendCo(Object.assign({k:'pg'},progress()),net().host);else sendCo(Object.assign({k:'pr'},progress()))}
-function applySnap(es){for(const a of es){const e=O.pup.get(a[0]);if(!e||e.dead)continue;e.tx=a[1];e.ty=a[2];e.tz=a[3];e.tf=a[4];if(a[5]!==e.hp){e.hp=a[5];if(e.boss&&bossE===e)updateBoss(e)}e._fl=a[6];e.st=a[7];e._ly=a[8]||0;e.aggro=!!(a[6]&1);if(e.boss)e.engaged=!!(a[6]&4)}}
+function applySnap(es){for(const a of es){const e=O.pup.get(a[0]);if(!e||e.dead)continue;e.tx=a[1];e.ty=a[2];e.tz=a[3];e.tf=a[4];if(e._pd&&(a[5]<=e._pd.hp||performance.now()-e._pd.t>3000))e._pd=null;if(a[5]!==e.hp&&!(e._pd&&a[5]>e._pd.hp)){e.hp=a[5];if(e.boss&&bossE===e)updateBoss(e)}e._fl=a[6];e.st=a[7];e._ly=a[8]||0;e.aggro=!!(a[6]&1);if(e.boss)e.engaged=!!(a[6]&4)}}
 const ARMS=new Set(['wind','slam','cast','nova','tele','charge','crouch','throw','fire','aim','lob','jump','spit','summon','shoot']);
 function puppetStep(e,dt){if(e._pf===O.fr)return;e._pf=O.fr;e.t+=dt;e.flash=Math.max(0,e.flash-dt);const s=e._ss;
  // changes our own abilities made to this puppet (stun / slow / launch) are reported to the host once, then the host's truth is restored
@@ -7885,7 +7886,7 @@ O.stq=(e,o)=>{o.cn=e.cn;o.k='st';sendCo(o,net().host)};
 {const _sp=spawnEnemy;spawnEnemy=function(kind,x,z,tag,key,opt){if(O.rs==='guest'&&!(opt&&opt._pup))return null;return _sp.apply(this,arguments)}}
 /* hits on a puppet: normal feedback on this machine, the real damage is applied by the host */
 {const _h=hurtEnemy;hurtEnemy=function(e,dmg,dx,dz,kb,crit){
-  if(e&&e.pup&&!e.dead){const real=e.hp;e.hp=real+1e7;let used=0;try{_h.apply(this,arguments);used=real+1e7-e.hp}finally{e.hp=Math.max(1,real-used);if(e.boss&&bossE===e)try{updateBoss(e)}catch(x){}}
+  if(e&&e.pup&&!e.dead){const real=e.hp;e.hp=real+1e7;let used=0;try{_h.apply(this,arguments);used=real+1e7-e.hp}finally{e.hp=Math.max(1,real-used);if(used>0)e._pd={hp:e.hp,t:performance.now()};if(e.boss&&bossE===e)try{updateBoss(e)}catch(x){}}
    if(used>0)O.hits.push([e.cn,+(+dmg).toFixed(1),+(+dx||0).toFixed(2),+(+dz||0).toFixed(2),+(+kb||0).toFixed(1),crit?1:0]);return}
   return _h.apply(this,arguments)}}
 /* a wipe must not reset the boss while a teammate is still fighting it */
@@ -7949,6 +7950,618 @@ function flush(dt){if(O.rs==='guest'&&O.hits.length){const hs=O.hits.splice(0,40
 O.dump=()=>({rs:O.rs,pup:O.pup.size,byCn:O.byCn.size,peers:O.pc.length,seq:O.seq,got:O.got,stat:O.stat});
 return O})();
 
+</script>
+<script id="nca-champs6">
+/* ============ SIX MORE CHAMPIONS · Rhoka · Isolde · Cassian · Maeve · Rook · Elara ============
+   Rhoka   Grappler      grab a foe, then Slam / Suplex / Hurl it into a crowd; Clothesline Rush, Elbow Drop, Belly Flop.
+   Isolde  Frostwarden   every frost hit adds a Chill stack: 5 stacks freeze the foe, and Shatter / Glacial Spike deal double to frozen foes.
+                         Ice Wall raises a real wall that blocks enemies, players and enemy projectiles.
+   Cassian Songblade     a rapier bard. One song is always playing (Valor / Warding / Haste) and buffs you and your allies around you;
+                         hits build Resonance, and Crescendo spends it in a burst that matches the song.
+   Maeve   Wildshaper    druid form (thorns, roots, healing spores) or bear form (maul, roar, charge, Ironhide). Shapeshift swaps every ability.
+   Rook    Gunslinger    twin revolvers with a real 6-round cylinder. Reload, then tap Reload again in the gold window for a Perfect Reload
+                         (3 empowered rounds). Ricochet, Fan the Hammer, Quickdraw, Deadeye, Dynamite.
+   Elara   Chronomancer  Rewind to where you stood 3s ago (and the health you had), Time Bubble slows foes and their projectiles,
+                         Haste speeds the party, Echo repeats your last spell.
+   Everything is registered into the existing tables (models, palettes, clips, kits, select screen, stats, training arenas, ally AI,
+   unlock prices, studio bases). All damage goes through hitE / aoe / proj, so party guests forward their hits to the host as usual.
+   Per-actor state lives on P (ammo, form, song...) and is listed in AKF, so hired allies with these kits keep their own copy. */
+const C6=(()=>{
+const KEYS=['rhoka','isolde','cassian','maeve','rook','elara'];
+const H=HUB,{B,Bx,Cy,Co,Sp,Oc,Tr,halo}=H.prim,PI=Math.PI;
+const v3=(x,y,z)=>new THREE.Vector3(x||0,y||0,z||0);
+const HL=(m,c,s,x,y,z,op)=>{const h=halo(c,s,x,y,z,op);m.halos.push(h);return h};
+const capeG=(m,w,h,y,z,mat)=>{const g=new THREE.Group();g.position.set(0,y,z);g.add(B(Bx(w,h,.04),mat||m.cloth,0,-h/2,0),B(Bx(w,.06,.06),m.trim,0,-h,0));return g};
+const tipAt=(g,x,y,z)=>{const t=new THREE.Object3D();t.position.set(x,y,z);g.add(t);return t};
+const eyes=(head,mat,hs,y)=>{const z=hs*.47+.012;head.add(B(Bx(.075,.04,.02),mat,.085,y,z),B(Bx(.075,.04,.02),mat,-.085,y,z))};
+
+/* =====================================================================  MODELS  */
+H.CHK.push(...KEYS);
+Object.assign(H.CHP,{
+ rhoka:{armor:0x9a2a2e,trim:0xffc94a,cloth:0x2a1a24,glow:0xff7a3a,hair:0x1a1210,skin:0xb47a58},
+ isolde:{armor:0xa9cbe6,trim:0x5fc4f0,cloth:0x264482,glow:0x9be9ff,hair:0xdcecfa,skin:0xe2c8bc},
+ cassian:{armor:0x3a2e5e,trim:0xf2c94a,cloth:0x7e2a4c,glow:0xffd27a,hair:0x8a4a2a,skin:0xe2b89a},
+ maeve:{armor:0x5e4a32,trim:0x9adf6a,cloth:0x2f5a36,glow:0x9dff7a,hair:0xc8562a,skin:0xe0b898},
+ rook:{armor:0x6a4a30,trim:0xd9a35a,cloth:0x2c2622,glow:0xffb24a,hair:0x2a1a12,skin:0xd2a07a},
+ elara:{armor:0xebe4fa,trim:0xd8b45a,cloth:0x2a3c80,glow:0x8fe8ff,hair:0x2a2444,skin:0xe8c6ae}});
+Object.assign(H.HGT2,{rhoka:2.15,isolde:1.85,cassian:1.9,maeve:1.82,rook:1.88,elara:1.78});
+
+/* ----- RHOKA · grappler ----- */
+function mkRhoka(m){const R=H.humanoid(m,{tw:.68,th:.58,hs:.36,hw:.24,sw:.44,ul:.32,fl:.3,am:m.skin,fm:m.skin,gm:m.trim,brc:m.armor,lm:m.cloth,sm:m.cloth,bm:m.dark,btr:m.trim,tm:m.skin,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
+ chest.add(B(Bx(.64,.2,.36),m.skin,0,.43,.05),B(Bx(.09,.74,.44),m.armor,.13,.3,0,0,0,.55),B(Bx(.09,.74,.44),m.armor,-.13,.3,0,0,0,-.55),B(Oc(.07),m.glow,0,.3,.23));
+ body.add(B(Bx(.6,.17,.4),m.trim,0,.1,0),B(Cy(.15,.15,.05,12),m.trim,0,.1,.2,PI/2,0,0),B(Oc(.065),m.glow,0,.1,.24),B(Bx(.1,.12,.42),m.armor,.24,.1,0),B(Bx(.1,.12,.42),m.armor,-.24,.1,0));
+ for(const s of[-1,1]){const k=s<0?'R':'L',sh=R['sh'+k];sh.add(B(Sp(.2,7),m.armor,s*.03,.03,0),B(Co(.05,.18,4),m.trim,s*.1,.18,0,0,0,-s*.5));
+  R['hand'+k].add(B(Bx(.19,.18,.19),m.trim,0,-.04,0),B(Bx(.2,.05,.2),m.armor,0,.04,0));R['el'+k].add(B(Bx(.17,.1,.17),m.armor,0,-.06,0))}
+ head.add(B(Bx(.39,.3,.37),m.armor,0,.22,0),B(Bx(.1,.05,.02),m.steel,.085,.23,.19),B(Bx(.1,.05,.02),m.steel,-.085,.23,.19),B(Bx(.045,.22,.02),m.trim,0,.27,.19),
+  B(Bx(.02,.14,.02),m.trim,.15,.25,.19,0,0,.4),B(Bx(.02,.14,.02),m.trim,-.15,.25,.19,0,0,-.4),B(Bx(.08,.16,.4),m.hair,0,.44,-.01),B(Bx(.06,.1,.12),m.hair,0,.4,-.22));
+ HL(m,0xff7a3a,.5,0,.3,.26,.5);
+ const w=new THREE.Group();R.handR.add(w);R.weapon=w;R.tip=tipAt(R.handR,0,-.1,.05);R.tipL=tipAt(R.handL,0,-.1,.05);
+ return H.cmFinish(R,m,G)}
+/* ----- ISOLDE · frostwarden ----- */
+function mkIsolde(m){const R=H.humanoid(m,{tw:.46,th:.5,hs:.34,hw:.18,sw:.3,am:m.cloth,fm:m.armor,gm:m.armor,brc:m.trim,lm:m.cloth,sm:m.cloth,bm:m.armor,btr:m.trim,tm:m.armor,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
+ body.add(B(Cy(.22,.5,.9,10),m.cloth,0,-.38,0),B(Cy(.51,.51,.05,10),m.trim,0,-.82,0),B(Bx(.2,.8,.04),m.armor,0,-.4,.3,.13,0,0),B(Bx(.04,.8,.05),m.trim,0,-.4,.33,.13,0,0));
+ chest.add(B(Bx(.5,.3,.42),m.armor,0,.32,0),B(Bx(.6,.06,.46),m.trim,0,.5,0),B(Oc(.08),m.glow,0,.34,.23));
+ for(let i=-2;i<=2;i++)chest.add(B(Co(.045,.26-Math.abs(i)*.03,4),m.glow,i*.1,.6,-.12,-.3,0,-i*.18));
+ for(const s of[-1,1]){const sh=R[s<0?'shR':'shL'];sh.add(B(Oc(.14),m.trim,s*.04,.04,0),B(Co(.04,.3,4),m.glow,s*.09,.2,0,0,0,-s*.4),B(Co(.03,.2,4),m.glow,s*.02,.18,.07,.3,0,-s*.2))}
+ head.add(B(Bx(.37,.13,.37),m.hair,0,.4,-.01),B(Bx(.37,.56,.1),m.hair,0,.12,-.18),B(Bx(.08,.4,.08),m.hair,.17,.12,.06),B(Bx(.08,.4,.08),m.hair,-.17,.12,.06),B(Bx(.38,.04,.38),m.trim,0,.35,0));
+ for(let i=-2;i<=2;i++)head.add(B(Co(.035,.2-Math.abs(i)*.04,4),m.glow,i*.07,.48,.15-Math.abs(i)*.03));
+ eyes(head,m.glow,.34,.2);
+ const st=new THREE.Group();st.position.set(0,-.05,.02);R.handR.add(st);
+ st.add(B(Cy(.028,.03,1.75,6),m.trim,0,.15,0),B(Cy(.05,.05,.08,6),m.armor,0,-.72,0),B(Oc(.13),m.glow,0,1.12,0),B(Co(.035,.26,4),m.glow,.1,1.05,0,0,0,-.6),B(Co(.035,.26,4),m.glow,-.1,1.05,0,0,0,.6),B(Tr(.1,.015,4,12),m.armor,0,1.0,0,PI/2,0,0));
+ const g=HL(m,0x9be9ff,.55,0,1.12,0,.45);st.add(g);
+ R.weapon=st;R.tip=tipAt(st,0,1.12,0);
+ return H.cmFinish(R,m,G)}
+/* ----- CASSIAN · songblade ----- */
+function mkCassian(m){const R=H.humanoid(m,{tw:.5,th:.52,hs:.35,am:m.cloth,fm:m.armor,gm:m.dark,brc:m.trim,lm:m.armor,sm:m.armor,bm:m.dark,btr:m.trim,tm:m.cloth,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
+ chest.add(B(Bx(.54,.36,.44),m.cloth,0,.3,0),B(Bx(.08,.66,.46),m.trim,0,.28,0,0,0,.62),B(Bx(.58,.08,.46),m.armor,0,.52,0));
+ for(let i=0;i<3;i++)chest.add(B(Sp(.028,5),m.trim,.1,.16+i*.11,.23));
+ const cp=capeG(m,.44,.74,.5,-.22,m.armor);cp.rotation.z=.08;chest.add(cp);R.cape=cp;
+ body.add(B(Bx(.48,.28,.36),m.cloth,0,-.16,0),B(Bx(.5,.04,.38),m.trim,0,-.3,0));
+ const lute=new THREE.Group();lute.position.set(.05,.32,-.3);lute.rotation.z=.7;chest.add(lute);
+ const lb=B(Sp(.17,8),m.wood,0,-.1,0);lb.scale.z=.42;lute.add(lb,B(Bx(.06,.5,.04),m.wood,0,.25,0),B(Bx(.1,.11,.05),m.dark,0,.53,0),B(Cy(.05,.05,.02,10),m.dark,0,-.08,.07,PI/2,0,0),B(Bx(.012,.6,.012),m.trim,0,.15,.08));
+ head.add(B(Bx(.37,.14,.38),m.hair,0,.38,-.01),B(Bx(.37,.24,.12),m.hair,0,.2,-.17),B(Cy(.36,.36,.03,14),m.armor,0,.42,0,.06,0,-.08),B(Cy(.19,.22,.17,10),m.armor,0,.52,0),B(Cy(.225,.225,.045,10),m.trim,0,.46,0));
+ const fe=B(Bx(.03,.04,.46),m.glow,.16,.6,-.14,-.75,.25,0);head.add(fe);
+ eyes(head,m.dark,.35,.2);
+ const sw=new THREE.Group();sw.position.y=-.05;R.handR.add(sw);
+ sw.add(B(Bx(.02,.026,1.0),m.steel,0,0,.7),B(Bx(.024,.014,.9),m.glow,0,.016,.68),B(Tr(.075,.012,4,10),m.trim,0,0,.18),B(Bx(.22,.03,.03),m.trim,0,0,.17),B(Cy(.022,.022,.17,6),m.dark,0,0,.07,PI/2,0,0),B(Sp(.036,5),m.trim,0,0,-.03));
+ R.weapon=sw;R.tip=H.addTip(sw,1.18);
+ /* two notes circling the shoulders while a song plays */
+ const nt=new THREE.Group();nt.position.y=.55;chest.add(nt);for(let i=0;i<2;i++){const n=new THREE.Group();n.position.set(Math.cos(i*PI)*.55,.05*i,Math.sin(i*PI)*.55);n.add(B(Sp(.04,5),m.glow,0,0,0),B(Bx(.012,.12,.012),m.glow,.03,.06,0));nt.add(n)}
+ nt.userData.anim=(o,t)=>{o.rotation.y=t*1.6;o.position.y=.55+Math.sin(t*2.2)*.04};R.notes=nt;
+ return H.cmFinish(R,m,G)}
+/* ----- MAEVE · wildshaper (druid + werebear parts on the same rig) ----- */
+function mkMaeve(m){const R=H.humanoid(m,{tw:.48,th:.5,hs:.34,am:m.skin,fm:m.skin,gm:m.skin,brc:m.trim,lm:m.armor,sm:m.armor,bm:m.dark,btr:m.trim,tm:m.cloth,belt:m.armor}),{chest,head,body}=R,G=new THREE.Group();
+ const fur=new THREE.MeshStandardMaterial({color:0x4a3222,roughness:.85,metalness:.02,flatShading:true,emissive:0x2a1a10,emissiveIntensity:.15});
+ const D=[],BR=[],dz=(o,p)=>{p.add(o);D.push(o);return o},bz=(o,p)=>{p.add(o);BR.push(o);o.visible=false;return o};
+ /* shared */
+ chest.add(B(Bx(.5,.34,.42),m.cloth,0,.3,0),B(Bx(.52,.07,.44),m.armor,0,.06,0));body.add(B(Cy(.22,.38,.46,10),m.cloth,0,-.2,0),B(Cy(.39,.39,.04,10),m.trim,0,-.42,0));
+ head.add(B(Bx(.36,.13,.36),m.hair,0,.38,-.01),B(Bx(.36,.5,.1),m.hair,0,.12,-.17),B(Bx(.08,.36,.08),m.hair,.16,.13,.07),B(Bx(.08,.36,.08),m.hair,-.16,.13,.07));eyes(head,m.trim,.34,.2);
+ /* druid: leaf mantle, antler crown, staff */
+ for(let i=0;i<7;i++){const a=-1.2+i*.4;dz(B(Co(.07,.3,4),m.trim,Math.sin(a)*.3,.52,Math.cos(a)*.18,.4*Math.cos(a),0,-a*.8),chest)}
+ for(const s of[-1,1]){const an=new THREE.Group();an.position.set(s*.12,.42,-.02);an.rotation.z=-s*.35;dz(an,head);
+  an.add(B(Cy(.022,.03,.32,5),m.wood,0,.16,0),B(Cy(.016,.02,.16,5),m.wood,s*.06,.26,.02,0,0,-s*.8),B(Cy(.016,.02,.14,5),m.wood,-s*.02,.32,.04,.5,0,s*.3),B(Sp(.03,5),m.glow,s*.12,.31,.02))}
+ const st=new THREE.Group();st.position.set(0,-.05,.02);dz(st,R.handR);
+ st.add(B(Cy(.03,.035,1.6,6),m.wood,0,.1,0),B(Tr(.09,.02,4,10),m.wood,0,.95,0),B(Sp(.08,6),m.glow,0,.95,0));for(let i=0;i<3;i++)st.add(B(Co(.04,.16,4),m.trim,Math.cos(i*2.1)*.09,.86,Math.sin(i*2.1)*.09,0,0,.4));
+ st.add(HL(m,0x9dff7a,.7,0,.95,0,.7));R.tipD=tipAt(st,0,.95,0);
+ /* bear: fur mantle + hump, bear-head hood, clawed paws, furred limbs */
+ bz(B(Bx(.74,.3,.58),fur,0,.46,0),chest);bz(B(Sp(.3,7),fur,0,.48,-.16),chest);bz(B(Bx(.6,.36,.5),fur,0,.22,0),chest);
+ bz(B(Bx(.46,.4,.46),fur,0,.25,-.02),head);bz(B(Bx(.22,.16,.2),fur,0,.15,.27),head);bz(B(Bx(.09,.06,.05),m.dark,0,.19,.38),head);
+ bz(B(Sp(.07,5),fur,.17,.46,-.02),head);bz(B(Sp(.07,5),fur,-.17,.46,-.02),head);bz(B(Bx(.08,.04,.02),m.glow,.1,.28,.235),head);bz(B(Bx(.08,.04,.02),m.glow,-.1,.28,.235),head);
+ for(const s of['R','L']){bz(B(Bx(.24,.28,.24),fur,0,-.12,0),R['sh'+s]);bz(B(Bx(.22,.22,.22),fur,0,-.1,0),R['el'+s]);bz(B(Bx(.2,.16,.22),fur,0,-.05,.02),R['hand'+s]);
+  for(let i=-1;i<=1;i++)bz(B(Co(.026,.18,4),m.steel,i*.06,-.15,.08,PI-.3,0,0),R['hand'+s]);bz(B(Bx(.24,.22,.24),fur,0,-.1,0),R['leg'+s])}
+ R.tipB=tipAt(R.handR,0,-.2,.1);R.tipBL=tipAt(R.handL,0,-.2,.1);
+ R.druid=D;R.bear=BR;R.weapon=st;R.tip=R.tipD;R.tipL=R.tipBL;
+ return H.cmFinish(R,m,G)}
+function setBearVis(R,on){if(!R||!R.bear||R._bear===on)return;R._bear=on;for(const o of R.bear)o.visible=on;for(const o of R.druid)o.visible=!on;R.root.scale.setScalar(on?1.26:1);R.tip=on?R.tipB:R.tipD}
+/* ----- ROOK · gunslinger ----- */
+function revolver(m){const g=new THREE.Group();g.position.set(0,-.06,.02);
+ g.add(B(Cy(.032,.032,.36,8),m.steel,0,.05,.22,PI/2,0,0),B(Bx(.012,.012,.3),m.glow,0,.085,.22),B(Cy(.062,.062,.11,8),m.steel,0,.04,.03,PI/2,0,0),B(Bx(.055,.085,.17),m.dark,0,.04,.04),
+  B(Bx(.05,.15,.075),m.wood,0,-.05,-.06,.35,0,0),B(Bx(.02,.045,.03),m.dark,0,.1,-.05),B(Bx(.014,.03,.02),m.trim,0,.09,.38),B(Tr(.03,.008,4,8),m.trim,0,-.02,.04,0,PI/2,0));
+ g.userData.tip=tipAt(g,0,.05,.42);return g}
+function mkRook(m){const R=H.humanoid(m,{tw:.5,th:.52,hs:.35,hw:.19,am:m.cloth,fm:m.cloth,gm:m.dark,brc:m.trim,lm:m.armor,sm:m.armor,bm:m.dark,btr:m.trim,tm:m.armor,belt:m.armor}),{chest,head,body}=R,G=new THREE.Group();
+ const band=new THREE.MeshStandardMaterial({color:0x8a2a2a,roughness:.7,flatShading:true,emissive:0x3a0a0a,emissiveIntensity:.2});
+ chest.add(B(Bx(.58,.54,.45),m.cloth,0,.27,0),B(Bx(.3,.44,.02),m.armor,0,.27,.23),B(Oc(.045),m.trim,.09,.38,.245),B(Bx(.62,.1,.47),m.cloth,0,.53,0,-.18,0,0),B(Bx(.62,.05,.47),m.trim,0,.06,0));
+ body.add(B(Bx(.52,.66,.04),m.cloth,0,-.34,-.21,-.14,0,0),B(Bx(.04,.66,.34),m.cloth,.27,-.34,-.04,0,0,.06),B(Bx(.04,.66,.34),m.cloth,-.27,-.34,-.04,0,0,-.06),B(Bx(.53,.04,.06),m.trim,0,-.66,-.26,-.14,0,0),B(Bx(.5,.08,.4),m.armor,0,.04,0));
+ for(let i=-3;i<=3;i++)body.add(B(Bx(.022,.05,.022),m.trim,i*.06,.06,.21));
+ head.add(B(Bx(.37,.12,.36),m.hair,0,.34,-.02),B(Bx(.37,.13,.375),band,0,.1,.005),B(Co(.08,.14,4),band,0,.03,.15,.6,PI/4,0),
+  B(Cy(.37,.37,.03,14),m.armor,0,.4,0,.08,0,.05),B(Cy(.18,.22,.2,10),m.armor,0,.51,0),B(Cy(.225,.225,.045,10),m.trim,0,.44,0),B(Bx(.12,.06,.06),m.dark,0,.61,.06));
+ eyes(head,m.dark,.35,.21);
+ const gR=revolver(m),gL=revolver(m);R.handR.add(gR);R.handL.add(gL);R.weapon=gR;R.tip=gR.userData.tip;R.tipL=gL.userData.tip;R.gunL=gL;
+ return H.cmFinish(R,m,G)}
+/* ----- ELARA · chronomancer ----- */
+function mkElara(m){const R=H.humanoid(m,{tw:.44,th:.48,hs:.34,hw:.17,sw:.29,am:m.cloth,fm:m.armor,gm:m.armor,brc:m.trim,lm:m.cloth,sm:m.cloth,bm:m.armor,btr:m.trim,tm:m.armor,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
+ body.add(B(Cy(.2,.46,.88,12),m.cloth,0,-.37,0),B(Cy(.47,.47,.04,12),m.trim,0,-.8,0));
+ for(let i=0;i<7;i++){const a=i*.9;body.add(B(Sp(.022,4),m.glow,Math.sin(a)*(.26+i*.025),-.15-i*.09,Math.cos(a)*(.26+i*.025)))}
+ const hg=new THREE.Group();hg.position.set(.24,-.08,.08);body.add(hg);hg.add(B(Co(.055,.09,6),m.glow,0,.05,0,PI,0,0),B(Co(.055,.09,6),m.glow,0,-.05,0),B(Cy(.07,.07,.02,8),m.trim,0,.1,0),B(Cy(.07,.07,.02,8),m.trim,0,-.1,0),B(Cy(.008,.008,.2,4),m.trim,.06,0,0));
+ chest.add(B(Bx(.48,.3,.42),m.armor,0,.3,0),B(Bx(.56,.06,.46),m.trim,0,.48,0),B(Cy(.1,.1,.03,16),m.trim,0,.32,.215,PI/2,0,0),B(Cy(.08,.08,.035,16),m.cloth,0,.32,.22,PI/2,0,0));
+ const ck=new THREE.Group();ck.position.set(0,.32,.242);chest.add(ck);ck.add(B(Bx(.012,.07,.01),m.glow,0,.03,0));ck.userData.anim=(o,t)=>{o.rotation.z=-t*1.2};
+ const gr=new THREE.Group();gr.position.set(0,.24,-.3);head.add(gr);gr.add(B(Tr(.3,.022,4,24),m.trim,0,0,0),B(Tr(.2,.016,4,18),m.glow,0,0,0));
+ for(let i=0;i<10;i++){const a=i*PI/5;gr.add(B(Bx(.055,.055,.03),m.trim,Math.cos(a)*.33,Math.sin(a)*.33,0,0,0,a))}
+ for(let i=0;i<4;i++){const a=i*PI/2;gr.add(B(Bx(.012,.18,.012),m.glow,Math.cos(a)*.1,Math.sin(a)*.1,0,0,0,a-PI/2))}
+ gr.add(HL(m,0x8fe8ff,.9,0,0,0,.35));gr.userData.anim=(o,t)=>{o.rotation.z=t*.5};
+ head.add(B(Bx(.36,.13,.36),m.hair,0,.38,-.01),B(Bx(.36,.58,.1),m.hair,0,.1,-.17),B(Bx(.07,.34,.08),m.hair,.165,.15,.08),B(Bx(.07,.34,.08),m.hair,-.165,.15,.08),B(Bx(.37,.035,.37),m.trim,0,.33,0),B(Oc(.04),m.glow,0,.34,.19));
+ eyes(head,m.glow,.34,.2);
+ const wd=new THREE.Group();wd.position.y=-.05;R.handR.add(wd);wd.add(B(Cy(.018,.022,.5,6),m.trim,0,0,.18,PI/2,0,0),B(Oc(.05),m.glow,0,0,.46),B(Tr(.05,.01,4,10),m.trim,0,0,.4));wd.add(HL(m,0x8fe8ff,.5,0,0,.46,.6));
+ R.weapon=wd;R.tip=H.addTip(wd,.46);
+ const mo=new THREE.Group();mo.position.y=1.1;R.root.add(mo);for(let i=0;i<3;i++){const s=HL(m,0x8fe8ff,.22,Math.cos(i*2.1)*.7,i*.15,Math.sin(i*2.1)*.7,.8);mo.add(s)}mo.userData.anim=(o,t)=>{o.rotation.y=-t*1.1};
+ return H.cmFinish(R,m,G)}
+Object.assign(H.CHBUILD,{rhoka:mkRhoka,isolde:mkIsolde,cassian:mkCassian,maeve:mkMaeve,rook:mkRook,elara:mkElara});
+
+/* ----- stances, locomotion, clips ----- */
+const STB={rhoka:{Rx:-.55,re:-1.25,Rz:.25,Lx:-.55,le:-1.25,Lz:.25,rk:.22,lk:.22,h:-.05,cx:.1,rl:-.15,ll:.12},
+ isolde:{Rx:-.35,re:-.55,Rz:.12,wx:.1,Lx:-.3,le:-.7,Lz:.2,rk:.05,lk:.05},
+ cassian:{Rx:-.6,re:-.9,Rz:.1,wx:.55,Lx:-.2,le:-.8,Lz:.4,rk:.12,lk:.12,cy:-.15,rl:-.12,ll:.1},
+ maeve:{Rx:-.35,re:-.55,Rz:.12,wx:.1,Lx:-.4,le:-.8,Lz:.2,rk:.06,lk:.06},
+ rook:{Rx:-.25,re:-.7,Rz:.15,wx:.2,Lx:-.25,le:-.7,Lz:.15,vx:.2,rk:.08,lk:.08,cy:.05},
+ elara:{Rx:-.45,re:-.8,Rz:.1,wx:.4,Lx:-.4,le:-.9,Lz:.3,rk:.05,lk:.05}};
+const ST_HOLD={Rx:-1.15,re:-1.0,Rz:0,Lx:-1.15,le:-1.0,Lz:0,rk:.25,lk:.25,h:-.06,cx:-.06,rl:-.15,ll:.12};
+const ST_BEAR={Rx:-.75,re:-.9,Rz:.35,wx:.2,Lx:-.75,le:-.9,Lz:.35,rk:.3,lk:.3,h:-.12,cx:.35,bx:.12,hx:-.25,rl:-.25,ll:.2};
+for(const k of KEYS)H.STANCE[k]=Object.assign({},STB[k]);
+Object.assign(H.LOCO,{rhoka:{leg:.75,arm:.4,lean:.12,bob:.08},isolde:{leg:.85,arm:.25,lean:.08,bob:.04},cassian:{leg:.95,arm:.35,lean:.14,bob:.05},maeve:{leg:.9,arm:.35,lean:.12,bob:.05},rook:{leg:.9,arm:.3,lean:.1,bob:.04},elara:{leg:.85,arm:.25,lean:.08,bob:.04}});
+const K_=(...a)=>({k:a});
+const CLR={
+ jab:K_([0,{}],[.3,{Rx:-1.2,re:-1.6,cy:-.3,Lx:-1.0,le:-1.8,rl:.2,ll:-.2}],[.5,{Rx:-1.58,re:-.05,wx:.2,cy:.45,bx:.1,Lx:-1.0,le:-1.8,rl:-.3,ll:.3},'i'],[.75,{Rx:-1.58,re:-.05,cy:.45,bx:.1,Lx:-1.0,le:-1.8}],[1,{}]),
+ cross:K_([0,{}],[.3,{Lx:-1.2,le:-1.6,cy:.3,Rx:-1.0,re:-1.8,rl:-.2,ll:.2}],[.5,{Lx:-1.58,le:-.05,vx:.2,cy:-.45,bx:.1,Rx:-1.0,re:-1.8,rl:.3,ll:-.3},'i'],[.75,{Lx:-1.58,le:-.05,cy:-.45,bx:.1,Rx:-1.0,re:-1.8}],[1,{}]),
+ smash:K_([0,{}],[.34,{Rx:-2.9,Lx:-2.9,re:-.3,le:-.3,Rz:-.2,Lz:-.2,cx:-.3,h:.02}],[.55,{Rx:-.9,Lx:-.9,re:-.2,le:-.2,Rz:-.2,Lz:-.2,cx:.6,h:-.18,rk:.4,lk:.4,bx:.15},'i'],[.85,{Rx:-.9,Lx:-.9,re:-.2,le:-.2,cx:.6,h:-.18,rk:.4,lk:.4,bx:.15}],[1,{}]),
+ grab:K_([0,{}],[.35,{Rx:-1.45,Lx:-1.45,re:-.2,le:-.2,Rz:.4,Lz:.4,cx:.2,bx:.15,h:-.08,rl:-.4,ll:.3}],[.6,{Rx:-1.3,Lx:-1.3,re:-.7,le:-.7,Rz:-.05,Lz:-.05,cx:.1,h:-.04},'i'],[1,ST_HOLD]),
+ slam:K_([0,ST_HOLD],[.35,{Rx:-2.9,Lx:-2.9,re:-.5,le:-.5,cx:-.35,h:.04,hx:-.2}],[.6,{Rx:-.9,Lx:-.9,re:-.2,le:-.2,cx:.7,bx:.2,h:-.25,rk:.6,lk:.6},'i'],[.85,{Rx:-.9,Lx:-.9,cx:.7,bx:.2,h:-.25,rk:.6,lk:.6}],[1,{}]),
+ suplex:K_([0,{}],[.25,{Rx:-2.4,Lx:-2.4,re:-.6,le:-.6,cx:.2,h:-.15,rk:.5,lk:.5}],[.6,{Rx:-3.0,Lx:-3.0,re:-.2,le:-.2,bx:-1.3,cx:-.5,h:-.25,rl:-.3,ll:-.3,rk:.6,lk:.6},'i'],[.85,{Rx:-3.0,Lx:-3.0,bx:-1.3,cx:-.5,h:-.35}],[1,{}]),
+ hurl:K_([0,{}],[.3,{Rx:-2.8,Lx:-2.8,re:-.9,le:-.9,cx:-.45,bx:-.2,rl:.4,ll:-.3}],[.55,{Rx:-1.2,Lx:-1.2,re:-.1,le:-.1,cx:.6,bx:.3,h:-.1,rl:-.6,ll:.5},'i'],[.85,{Rx:-1.0,Lx:-1.0,cx:.5,bx:.25}],[1,{}]),
+ cline:K_([0,{}],[.15,{Rz:1.45,Rx:-.3,re:0,Lx:-.8,le:-1.2,bx:.3,cy:.35,h:-.08,rl:-.6,ll:.6}],[.85,{Rz:1.45,Rx:-.3,re:0,Lx:-.8,le:-1.2,bx:.3,cy:.35,h:-.08,rl:.6,ll:-.6}],[1,{}]),
+ elbow:K_([0,{}],[.2,{h:-.2,rk:.8,lk:.8,Rx:-.6,Lx:-.6,bx:.2}],[.45,{Rx:-2.6,re:-2.2,Lx:-1.0,le:-1.4,bx:-.1,rl:-.8,ll:.4}],[.8,{Rx:-1.0,re:-2.4,bx:.9,cx:.4,h:-.2,rl:-1.2,ll:-1.0},'i'],[1,{}]),
+ flop:K_([0,{}],[.22,{h:-.2,rk:.9,lk:.9,Rx:-2.8,Lx:-2.8}],[.55,{Rx:-2.9,Lx:-2.9,Rz:.9,Lz:.9,bx:.4,rl:.3,ll:.3}],[.8,{Rx:-1.6,Lx:-1.6,Rz:1.3,Lz:1.3,bx:1.45,h:-.5,rl:.4,ll:.4},'i'],[.92,{Rx:-1.6,Lx:-1.6,Rz:1.3,Lz:1.3,bx:1.45,h:-.5}],[1,{}])};
+const GUN={
+ shootR:K_([0,{}],[.2,{Rx:-1.5,re:-.05,wx:1.5,cy:.3,Lx:-.4,le:-.7}],[.38,{Rx:-1.85,re:-.35,wx:1.15,cy:.3,hx:-.05},'i'],[.7,{Rx:-1.5,re:-.05,wx:1.5,cy:.3}],[1,{}]),
+ shootL:K_([0,{}],[.2,{Lx:-1.5,le:-.05,vx:1.5,cy:-.3,Rx:-.4,re:-.7}],[.38,{Lx:-1.85,le:-.35,vx:1.15,cy:-.3,hx:-.05},'i'],[.7,{Lx:-1.5,le:-.05,vx:1.5,cy:-.3}],[1,{}]),
+ shootB:K_([0,{}],[.25,{Rx:-1.5,re:-.05,wx:1.5,Lx:-1.5,le:-.05,vx:1.5,Rz:-.08,Lz:-.08,h:-.05}],[.42,{Rx:-1.95,re:-.4,wx:1.1,Lx:-1.95,le:-.4,vx:1.1,h:-.06},'i'],[.75,{Rx:-1.5,re:-.05,wx:1.5,Lx:-1.5,le:-.05,vx:1.5}],[1,{}]),
+ fan:K_([0,{}],[.12,{Rx:-1.45,re:-.05,wx:1.5,Lx:-1.2,le:-1.4,Lz:-.35,vx:1.0,cy:.15,h:-.06,rk:.2,lk:.2}],[.92,{Rx:-1.45,re:-.05,wx:1.5,Lx:-1.2,le:-1.4,Lz:-.35,vx:1.0,cy:.15,h:-.06,rk:.2,lk:.2}],[1,{}]),
+ reload:K_([0,{}],[.2,{Rx:-.9,re:-1.4,wx:.9,Lx:-.9,le:-1.4,vx:.9,hx:.35,cx:.12}],[.5,{Rx:-.9,re:-1.5,wx:1.3,Lx:-1.0,le:-1.2,vx:.4,hx:.35,cx:.12}],[.85,{Rx:-.9,re:-1.4,wx:.9,Lx:-.9,le:-1.4,vx:.9,hx:.35,cx:.12}],[1,{}]),
+ deadeye:K_([0,{}],[.2,{Rx:-1.5,re:-.05,wx:1.5,Lx:-1.4,le:-.4,vx:1.4,hx:-.08,h:-.04}],[.9,{Rx:-1.5,re:-.05,wx:1.5,Lx:-1.4,le:-.4,vx:1.4,hx:-.08,h:-.04}],[1,{}])};
+const STRUM={strum:K_([0,{}],[.25,{Lx:-1.0,le:-1.6,Lz:.25,Rx:-.7,re:-1.5,Rz:-.35,wx:-.2,hx:.15,cy:.2}],[.5,{Lx:-1.0,le:-1.6,Lz:.25,Rx:-.8,re:-1.2,Rz:-.2,wx:.2,hx:.15,cy:.2}],[.8,{Lx:-1.0,le:-1.6,Lz:.25,Rx:-.7,re:-1.5,Rz:-.35,hx:.15,cy:.2}],[1,{}])};
+const MAUL={maul:K_([0,{}],[.35,{Rx:-2.6,Lx:-2.6,re:-.8,le:-.8,Rz:.5,Lz:.5,cx:-.3,h:-.05}],[.55,{Rx:-.7,Lx:-.7,re:-.3,le:-.3,Rz:.1,Lz:.1,cx:.75,bx:.3,h:-.25,rk:.5,lk:.5},'i'],[.85,{Rx:-.7,Lx:-.7,cx:.75,bx:.3,h:-.25,rk:.5,lk:.5}],[1,{}]),
+ roar:K_([0,{}],[.3,{Rx:-.6,Lx:-.6,Rz:1.0,Lz:1.0,re:-1.2,le:-1.2,cx:-.35,hx:-.5,h:-.04}],[.75,{Rx:-.6,Lx:-.6,Rz:1.1,Lz:1.1,re:-1.2,le:-1.2,cx:-.4,hx:-.55,h:-.04}],[1,{}])};
+const ch=(base,x)=>Object.assign({},base||{},x);
+H.CLX.rhoka=ch(null,CLR);
+H.CLX.rook=ch({throw:(H.CLX.brigid||{}).throw},GUN);
+H.CLX.cassian=ch(null,STRUM);
+H.CLX.maeve=ch(null,MAUL);
+H.CLX.isolde=ch(H.CLX.nyx,null);H.CLX.elara=ch(H.CLX.nyx,null);
+
+/* =====================================================================  SHARED HELPERS  */
+const KB=()=>{const K=KITS[Hero.key];return(K&&K.base)||Hero.key};
+const iam=k=>KB()===k;
+const AC=()=>typeof AKC!=='undefined'&&AKC;     /* an ally is acting right now */
+const isPup=e=>!!(e&&e.pup);
+const gY=(x,z)=>RT.terr.H(x,z);
+const snd={
+ punch:()=>VX.A([['kickH',{gain:.75,rate:.85,pj:.1}],['blunt',{gain:.5,rate:.9,delay:.01}]]),
+ thud:()=>VX.A([['exp',{gain:.8,rate:.75}],['blunt',{gain:.8,rate:.6,delay:.02}]]),
+ grab:()=>VX.A([['body',{gain:.6,rate:.9}],['plate',{gain:.25,rate:.8,delay:.02}]]),
+ frost:()=>VX.A([['zap',{gain:.35,rate:1.7,pj:.15}],['laser',{gain:.25,rate:1.9,delay:.01}]]),
+ shard:()=>VX.A([['laser',{gain:.4,rate:1.4}],['zap',{gain:.35,rate:2.0,delay:.02}]]),
+ shatter:()=>VX.A([['exp',{gain:.6,rate:1.6}],['zap',{gain:.6,rate:1.9,delay:.01}],['plate',{gain:.4,rate:1.9,delay:.02}]]),
+ wall:()=>VX.A([['exp',{gain:.55,rate:.9}],['zap',{gain:.45,rate:1.4,delay:.03}]]),
+ rapier:()=>VX.A([['slash',{gain:.5,rate:1.35,pj:.12}]]),
+ chord:()=>VX.A([['heal',{gain:.6,rate:1.0}],['heal',{gain:.4,rate:1.26,delay:.05}],['heal',{gain:.35,rate:1.5,delay:.1}]]),
+ cresc:()=>VX.A([['exp',{gain:.7,rate:1.1}],['heal',{gain:.8,rate:1.5,delay:.02}],['heal',{gain:.6,rate:1.2,delay:.08}]]),
+ claw:()=>VX.A([['slash',{gain:.6,rate:.8,pj:.1}],['body',{gain:.5,rate:.8,delay:.02}]]),
+ roar:()=>VX.A([['fire',{id:'fire4',gain:.7,rate:.45}],['exp',{gain:.4,rate:.5,delay:.03}]]),
+ shift:()=>VX.A([['fire',{id:'fire3a',gain:.4,rate:.7}],['heal',{gain:.5,rate:.7,delay:.04}]]),
+ shot:()=>VX.A([['expS',{gain:.6,rate:1.75,pj:.1}],['blunt',{gain:.35,rate:1.6,delay:.004}]]),
+ eshot:()=>VX.A([['exp',{gain:.6,rate:1.45}],['zap',{gain:.35,rate:1.5,delay:.005}]]),
+ click:()=>sfx(1800,.04,'square',.03,-400),
+ spin:()=>VX.A([['plate',{gain:.35,rate:1.9}]]),
+ rl:()=>VX.A([['plate',{gain:.45,rate:1.4}],['plate',{gain:.4,rate:1.7,delay:.08}]]),
+ tick:()=>VX.A([['laser',{gain:.35,rate:1.8}],['zap',{gain:.3,rate:2.2,delay:.03}]]),
+ rewind:()=>VX.A([['laser',{gain:.5,rate:.55}],['heal',{gain:.6,rate:.6,delay:.05}]])};
+function tipW(){try{return tipP()}catch(e){return v3(P.x,P.y+1.2,P.z)}}
+function tipLW(){try{if(HR&&HR.tipL){const v=v3();HR.tipL.getWorldPosition(v);return v}}catch(e){}return tipW()}
+function ring(x,z,col,r,T){VX.circle(x,z,r,T||.6,col,'guard',gY(x,z));VX.wave(x,z,col,r*.2,gY(x,z))}
+function burst(x,y,z,col,s){VX.puff('flare',v3(x,y,z),v3(),.3,s*.4,s,col,.9);sparks.emit(x,y,z,col,Math.round(8+s*3),s*1.6,.25,.4,-3)}
+const nearest=(x,z,r,f)=>{let b=null,bd=1e9;for(const e of ENEM){if(!liveE(e))continue;if(f&&!f(e))continue;const d=Math.hypot(e.x-x,e.z-z)-e.r;if(d<r&&d<bd){bd=d;b=e}}return b};
+const inFront=(e,arc)=>{const a=FACE(e.x-P.x,e.z-P.z);return Math.abs(angd(P.face,a))<arc};
+
+/* =====================================================================  RHOKA  */
+const RHC=0xff7a3a;
+const canHold=e=>e&&liveE(e)&&!e.boss&&!e.fly&&massOf(e)<2.2;
+function grabTarget(r){let t=nearest(P.x,P.z,r,e=>inFront(e,1.2));if(!t)t=nearest(P.x,P.z,r*.7);return t}
+function holdOf(){const h=P.held;return h&&h.e&&liveE(h.e)&&TIME<h.until?h:null}
+function seize(e){if(!e)return false;P.face=FACE(e.x-P.x,e.z-P.z);
+ if(!canHold(e)||isPup(e)){hitE(e,16*P.pm,{kb:0,stun:1.1,big:1,col:RHC});burst(e.x,e.y+e.h*.6,e.z,RHC,2.4);snd.grab();if(!canHold(e))dmgNum(e.x,e.y+(e.ly||0)+e.h+.6,e.z,'BEAR HUG','crit');P.held=isPup(e)&&canHold(e)?{e,until:TIME+2.6,pup:1}:null;return!!P.held}
+ P.held={e,until:TIME+3};e.stun=Math.max(e.stun||0,3.1);e.kx=e.kz=0;hitE(e,6*P.pm,{kb:0,stun:3,col:RHC,silent:1});snd.grab();burst(e.x,e.y+e.h*.6,e.z,RHC,2);return true}
+function release(){const h=P.held;P.held=null;if(h&&h.e&&!h.e.dead&&!isPup(h.e)){h.e.stun=Math.min(h.e.stun||0,.6);h.e.lvy=-2}return h&&h.e}
+/* the thrown foe flies on its own arc; on landing it (and the crowd around it) take the hit */
+const FLY=[];
+function throwFoe(e,tx,tz,T,peak,dm,r,o){if(!e||e.dead)return;if(isPup(e)){const dx=tx-e.x,dz=tz-e.z,l=Math.hypot(dx,dz)||1;hitE(e,dm,{dx:dx/l,dz:dz/l,kb:Math.min(16,l*1.4),stun:1.4,big:1,launch:6,col:RHC});TMR.push({t:T,fn:()=>{if(!playOn)return;slamFx(tx,tz,RHC,r);aoe(tx,tz,r,dm*.5,{kb:7,stun:.8,big:1,col:RHC})}});return}
+ FLY.push({e,sx:e.x,sz:e.z,sy:e.y,tx,tz,t:0,T,peak,dm,r,o:o||{},pm:P.pm,once:new Set([e])});e.stun=Math.max(e.stun||0,T+1)}
+function updFly(dt){for(let i=FLY.length-1;i>=0;i--){const f=FLY[i],e=f.e;f.t+=dt;const k=Math.min(1,f.t/f.T);
+  if(!e||e.dead){FLY.splice(i,1);continue}
+  const nx=f.sx+(f.tx-f.sx)*k,nz=f.sz+(f.tz-f.sz)*k,p={x:nx,z:nz};try{pushOut(e,p)}catch(x){}e.x=p.x;e.z=p.z;e.ly=Math.max(.01,Math.sin(k*PI)*f.peak+(1-k)*1.2);e.lvy=0;e.kx=e.kz=0;e.stun=Math.max(e.stun||0,.5);
+  if(f.o.path){for(const q of ENEM){if(q===e||f.once.has(q)||!liveE(q))continue;if(Math.hypot(q.x-e.x,q.z-e.z)<q.r+e.r+.4){f.once.add(q);hitE(q,f.o.path*f.pm,{kb:9,stun:1,big:1,launch:5,col:RHC,dx:Math.sin(FACE(f.tx-f.sx,f.tz-f.sz)),dz:Math.cos(FACE(f.tx-f.sx,f.tz-f.sz))})}}}
+  if(Math.random()<.6)VX.puff('trail',v3(e.x,e.y+e.ly+e.h*.5,e.z),v3(),.25,.7,.3,RHC,.6);
+  if(k>=1){FLY.splice(i,1);e.ly=.01;e.lvy=-4;const x=e.x,z=e.z;slamFx(x,z,RHC,f.r);VX.dust(x,z,6,1.6);shake(.4);HS=Math.max(HS,.06);snd.thud();
+   hitE(e,f.dm,{kb:3,stun:1.3,big:1,col:RHC});aoe(x,z,f.r,f.dm*.45,{kb:8,stun:.9,big:1,col:RHC,once:new Set([e])})}}}
+function updHeld(actor,ps){const h=ps.held;if(!h)return;const e=h.e;if(!e||e.dead||TIME>=h.until){if(e&&!e.dead&&!isPup(e)){e.ly=Math.max(e.ly||0,.01);e.lvy=-2}ps.held=null;return}
+ if(isPup(e))return;const f=actor.f,d=(actor.r||.5)+e.r+.25;const tx=actor.x+Math.sin(f)*d,tz=actor.z+Math.cos(f)*d,p={x:tx,z:tz};try{pushOut(e,p)}catch(x){}e.x=p.x;e.z=p.z;e.ly=1.05;e.lvy=0;e.kx=e.kz=0;e.stun=Math.max(e.stun||0,.4);e.f=f+PI;
+ if(Math.random()<.15)sparks.emit(e.x,e.y+e.ly+e.h*.5,e.z,RHC,1,1.5,.2,.3,0)}
+/* held-foe moves */
+function slamHeld(){const h=holdOf();if(!h)return false;const e=release();const x=P.x+Math.sin(P.face)*1.6,z=P.z+Math.cos(P.face)*1.6;
+ if(!isPup(e)){e.x=x;e.z=z;e.ly=.01;e.lvy=-10}hitE(e,38*P.pm,{kb:2,stun:1.5,big:1,col:RHC});slamFx(x,z,RHC,3);aoe(x,z,3,14*P.pm,{kb:7,stun:.7,big:1,col:RHC,once:new Set([e])});snd.thud();shake(.45);HS=Math.max(HS,.08);return true}
+const RH={
+ grab:()=>{if(slamHeld())return;const t=grabTarget(2.9);if(!t){VX.puff('burst',v3(P.x+Math.sin(P.face)*1.4,P.y+1.2,P.z+Math.cos(P.face)*1.4),v3(),.2,.5,1.4,RHC,.6);return}seize(t)},
+ suplex:()=>{let h=holdOf();if(!h){const t=grabTarget(2.7);if(t&&seize(t))h=holdOf()}if(!h)return;const e=release();const bx=P.x-Math.sin(P.face)*2.6,bz=P.z-Math.cos(P.face)*2.6;
+  throwFoe(e,bx,bz,.32,2.6,46*P.pm,3.2);P.inv=Math.max(P.inv,.45);shake(.2)},
+ hurl:()=>{let h=holdOf();if(!h){const t=grabTarget(2.7);if(t&&seize(t))h=holdOf()}if(!h)return;const e=release();const tg=aimGround(14,12);let dx=tg.x-P.x,dz=tg.z-P.z,d=Math.hypot(dx,dz);if(d<6){dx=Math.sin(P.face);dz=Math.cos(P.face);d=1;dx*=12;dz*=12}else{dx=dx/d*Math.min(14,d);dz=dz/d*Math.min(14,d)}
+  throwFoe(e,P.x+dx,P.z+dz,.62,3.4,30*P.pm,3.4,{path:24});snd.grab()}};
+function rhokaPassive(dmg){return holdOf()?dmg*.85:dmg}
+
+/* =====================================================================  ISOLDE  */
+const ICE=0x9be9ff,ICE2=0x7fd8ff;
+function chill(e,n){if(!e||e.dead||(e.boss&&!e.engaged))return;const c=e.chl||(e.chl={n:0,u:0});if(TIME>c.u)c.n=0;if(e.frzT>0){c.u=TIME+5;return}c.n+=n;c.u=TIME+5;
+ e.slowK=Math.max(e.slowK||0,Math.min(.55,.11*c.n));e.slowT=Math.max(e.slowT||0,1.5);
+ if(c.n>=5){c.n=0;try{HZ.freezeE(e,e.boss?1.1:2.6)}catch(x){e.stun=Math.max(e.stun||0,2)}dmgNum(e.x,e.y+(e.ly||0)+e.h+.6,e.z,'FROZEN','crit');burst(e.x,e.y+e.h*.6,e.z,ICE,3);sfx(1500,.22,'triangle',.05,-700)}}
+const frozen=e=>(e.frzT||0)>0;
+function shatterFx(e){const x=e.x,y=e.y+(e.ly||0)+e.h*.55,z=e.z;burst(x,y,z,0xe8ffff,3.4);VX.explode(v3(x,y,z),1.2,ICE,false,true);for(let i=0;i<10;i++){const a=Math.random()*6.28;VX.puff('spark',v3(x,y,z),v3(Math.cos(a)*6,2+Math.random()*4,Math.sin(a)*6),.5,.35,.1,0xe8ffff,1)}snd.shatter()}
+function frostBolt(dm,n,o){proj(Object.assign({sp:26,life:1.2,dmg:dm*P.mm,col:ICE,size:.26,r:.5,kb:1.5,aim:1,mag:1,onHit:e=>chill(e,n)},o||{}));snd.frost()}
+/* ice walls: a real collider + a jagged wall of ice that blocks movement and enemy projectiles */
+const WALLS=[];
+function iceWall(x,z,f,len,T){const y=gY(x,z),g=new THREE.Group(),m=new THREE.MeshStandardMaterial({color:0xbfefff,roughness:.15,metalness:.1,transparent:true,opacity:.78,emissive:0x4ab8ff,emissiveIntensity:.35,flatShading:true}),
+  m2=new THREE.MeshBasicMaterial({color:0xe8ffff,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false});
+ const n=Math.round(len/.8);for(let i=0;i<n;i++){const lx=-len/2+(i+.5)*len/n,h=2+Math.random()*.9,w=.7+Math.random()*.3;const c=new THREE.Mesh(new THREE.BoxGeometry(w,h,.8),m);c.position.set(lx,h/2,(Math.random()-.5)*.2);c.rotation.set((Math.random()-.5)*.15,(Math.random()-.5)*.4,(Math.random()-.5)*.15);g.add(c);
+  const s=new THREE.Mesh(new THREE.ConeGeometry(.24,.6+Math.random()*.4,4),m);s.position.set(lx+(Math.random()-.5)*.3,h+.2,0);g.add(s)}
+ const glow=new THREE.Mesh(new THREE.BoxGeometry(len,.06,1.1),m2);glow.position.y=.05;g.add(glow);g.userData.noPick=1;
+ g.position.set(x,y-2.8,z);g.rotation.y=f;RT.root.add(g);
+ const col={t:1,x,z,hx:len/2,hz:.5,c:Math.cos(f),s:Math.sin(f),y0:y-.5,y1:y+2.6,ice:1};RT.cols.push(col);
+ const w={g,col,x,z,f,len,y,t:0,T,mats:[m,m2]};WALLS.push(w);
+ /* anything standing where the wall rises is shoved out and chilled */
+ for(const e of ENEM){if(!liveE(e))continue;const dx=e.x-x,dz=e.z-z,lx=dx*col.c-dz*col.s,lz=dx*col.s+dz*col.c;if(Math.abs(lx)<len/2+e.r&&Math.abs(lz)<1.2+e.r){const sd=lz>=0?1:-1;hitE(e,10*P.mm,{mag:1,kb:7,stun:.5,col:ICE,dx:Math.sin(f)*sd,dz:Math.cos(f)*sd});chill(e,2)}}
+ for(let i=0;i<14;i++){const u=(Math.random()-.5)*len;VX.puff('aura',v3(x+Math.cos(f)*u,y+.3,z-Math.sin(f)*u),v3(0,2.5,0),.7,.8,1.6,ICE,.6)}
+ snd.wall();shake(.25);return w}
+function updWalls(dt){for(let i=WALLS.length-1;i>=0;i--){const w=WALLS[i];w.t+=dt;const rise=Math.min(1,w.t/.25),fall=w.t>w.T-.4?Math.max(0,(w.T-w.t)/.4):1;
+  w.g.position.y=w.y-2.8+2.8*rise*(2-rise)-(1-fall)*2.8;if(!RT.cols.includes(w.col)&&w.t<w.T-.2)RT.cols.push(w.col);
+  if(w.t>=w.T-.2){const j=RT.cols.indexOf(w.col);if(j>=0)RT.cols.splice(j,1)}
+  if(w.t>=w.T){killWall(w);WALLS.splice(i,1)}}}
+function killWall(w){const j=RT.cols.indexOf(w.col);if(j>=0)RT.cols.splice(j,1);w.g.parent&&w.g.parent.remove(w.g);w.g.traverse(o=>{if(o.geometry)o.geometry.dispose()});for(const m of w.mats)m.dispose();
+ for(let i=0;i<10;i++){const u=(Math.random()-.5)*w.len;VX.puff('spark',v3(w.x+Math.cos(w.f)*u,w.y+1+Math.random(),w.z-Math.sin(w.f)*u),v3(0,-1,0),.6,.35,.1,0xe8ffff,.9)}}
+function chillFx(dt){for(const e of ENEM){const c=e.chl;if(!c||e.dead)continue;if(TIME>c.u){c.n=0;continue}if(c.n>0&&Math.random()<dt*(2+c.n*2))VX.puff('spark',v3(e.x+(Math.random()-.5)*e.r*1.6,e.y+(e.ly||0)+e.h*(.2+Math.random()*.8),e.z+(Math.random()-.5)*e.r*1.6),v3(0,-.4,0),.6,.28,.08,ICE,.9)}}
+
+/* =====================================================================  CASSIAN  */
+const SONGS={valor:{n:'Song of Valor',c:0xff9a4a,h:'#ff9a4a',fx:'+20% damage'},ward:{n:'Song of Warding',c:0x7fd8ff,h:'#7fd8ff',fx:'-20% damage taken · regen'},haste:{n:'Song of Haste',c:0x9dff7a,h:'#9dff7a',fx:'+15% speed · faster cooldowns'}};
+const SONG_R=9;
+/* every Cassian in play (you or a hired ally) projects an aura */
+function auras(){const L=[];try{if(playOn&&!P.dead&&iam('cassian'))L.push({x:P.x,z:P.z,s:P.song||'valor'})}catch(e){}
+ try{if(typeof ALY!=='undefined')for(const a of ALY){if(a.down>0)continue;const K=KITS[a.hero];if(a.hero==='cassian'||(K&&K.base==='cassian'))L.push({x:a.x,z:a.z,s:(a.ps&&a.ps.song)||'valor'})}}catch(e){}return L}
+let AUR=[];
+const inSong=(s,x,z)=>AUR.some(a=>a.s===s&&Math.hypot(a.x-x,a.z-z)<SONG_R);
+function setSong(s){const was=P.song;P.song=s;const S=SONGS[s];ring(P.x,P.z,S.c,SONG_R*.5,.7);fxRing(S.c,3,.5);snd.chord();for(let i=0;i<6;i++)VX.puff('star',v3(P.x+(Math.random()-.5)*2,P.y+1+Math.random(),P.z+(Math.random()-.5)*2),v3(0,1.6,0),.8,.4,.1,S.c,.9);if(!AC()&&was!==s)toast('<b>'+S.n+'</b><br>'+S.fx+' for you and allies within '+SONG_R+'m')}
+const res=()=>Math.min(20,P.res||0);
+function addRes(n){if(n>0)P.res=Math.min(20,(P.res||0)+n)}
+function crescendo(){const s=P.song||'valor',S=SONGS[s],r=res(),k=1+r/20;P.res=0;const x=P.x,z=P.z;
+ slamFx(x,z,S.c,5.5);pillarFx(x,z,S.c,3);VX.explode(v3(x,P.y+1,z),1.6,S.c,false,true);aoe(x,z,5.5,(18+r*2.2)*P.mm,{mag:1,kb:8,stun:.8,big:1,col:S.c});snd.cresc();shake(.4);HS=Math.max(HS,.06);
+ if(s==='valor'){buffDm(4+r*.15)}
+ else if(s==='ward'){startWard(2+r*.1,S.c);healP(P.max*(.08+r*.006))}
+ else{for(const id in P.cd)if(P.cd[id]>0)P.cd[id]*=Math.max(.3,1-.25*k);P.hasteT=Math.max(P.hasteT||0,3+r*.15)}
+ try{for(const a of ALY){if(a.down>0||Math.hypot(a.x-x,a.z-z)>SONG_R)continue;if(s==='ward')a.hp=Math.min(a.max,a.hp+a.max*.12);if(s==='haste'&&a.ps)a.ps.hasteT=Math.max(a.ps.hasteT||0,4);if(s==='valor'&&a.ps)a.ps.dmT=Math.max(a.ps.dmT||0,4)}}catch(e){}
+ if(!AC())dmgNum(x,P.y+2.6,z,'CRESCENDO ×'+r,'crit')}
+function updSongs(dt){AUR=auras();
+ /* the player standing in an aura gets its effect, wherever the singer is */
+ if(!playOn||P.dead)return;
+ if(inSong('haste',P.x,P.z))P.hasteT=Math.max(P.hasteT||0,.25);
+ if(inSong('ward',P.x,P.z)&&P.hp<P.max){P.hp=Math.min(P.max,P.hp+P.max*.01*dt)}
+ for(const a of AUR){const S=SONGS[a.s];if(Math.random()<dt*7){const an=Math.random()*6.28,r=SONG_R*(.4+Math.random()*.6);VX.puff('spark',v3(a.x+Math.cos(an)*r,gY(a.x,a.z)+.3,a.z+Math.sin(an)*r),v3(0,1.4,0),.7,.3,.08,S.c,.7)}}
+ /* allies inside a Haste / Ward aura */
+ try{for(const q of ALY){if(q.down>0)continue;if(inSong('haste',q.x,q.z)&&q.ps)q.ps.hasteT=Math.max(q.ps.hasteT||0,.25);if(inSong('ward',q.x,q.z))q.hp=Math.min(q.max,q.hp+q.max*.01*dt)}}catch(e){}}
+
+/* =====================================================================  MAEVE  */
+const LEAF=0x9dff7a,BEARC=0xffa64a;
+const isBear=()=>P.form==='bear';
+function setForm(f,quiet){P.form=f;try{setBearVis(HR,f==='bear')}catch(e){}
+ if(!AC()&&iam('maeve')){const K=KITS[Hero.key];K.combo=f==='bear'?MV.bearCombo:MV.druidCombo;for(const a of K.ab){const v=MV.view[a.id];if(v){const s=v[f==='bear'?1:0];a.name=s[0];a.icon=s[1];a.col=s[2];a.d=s[3];a.clip=s[4];a.d0=s[5]}}
+  H.STANCE[Hero.key]=Object.assign({},f==='bear'?ST_BEAR:STB.maeve);P.armorB=f==='bear'?22:0;try{buildHotbar()}catch(e){}if(!quiet)toast(f==='bear'?'<b>Bear form</b><br>claws, Roar, Charge · 20% damage reduction':'<b>Druid form</b><br>thorns, roots and healing spores')}}
+const MV={view:{},druidCombo:null,bearCombo:null};
+
+/* =====================================================================  ROOK  */
+const GUNC=0xffb24a,GOLD=0xffd24a;
+const ammo=()=>P.ammo===undefined?6:P.ammo;
+const RLW=[.44,.64];       /* the perfect-reload window, as a fraction of the reload */
+function fire(dm,o){o=o||{};let a=ammo();if(a<=0){snd.click();if(AC()){P.ammo=6;snd.rl()}else startReload();return false}P.ammo=a-1;const emp=(P.emp||0)>0;if(emp)P.emp--;
+ const left=!!o.left,t=left?tipLW():tipW();VX.puff('wflare',t,v3(),.08,.5,1.8,0xffe0a0,1);sparks.emit(t.x,t.y,t.z,GUNC,5,5,.12,.2,0);
+ proj(Object.assign({from:t,noTip:1,sp:70,life:.55,dmg:dm*P.pm*(emp?1.75:1),col:emp?GOLD:GUNC,size:emp?.16:.1,r:.35,kb:emp?4:1.5,aim:1,big:emp,pierce:emp?1:0,y:1.3,fwd:.6,onHit:emp?(e=>{dmgNum(e.x,e.y+(e.ly||0)+e.h+.6,e.z,'EMPOWERED','crit')}):null},o.p||{}));
+ (emp?snd.eshot:snd.shot)();if(ammo()<=0&&!AC())TMR.push({t:.18,fn:()=>{if(playOn&&iam('rook')&&ammo()<=0&&!(P.act&&P.act.def&&P.act.def.id==='reload'))startReload()}});return true}
+function startReload(){if(AC()){P.ammo=6;return}if(P.dead||ammo()>=6)return;const K=KIT(),ab=K.ab.find(a=>a.id==='reload');if(!ab)return;if(P.act&&P.act.def===ab)return;if(P.act){if(P.act.isAtk)endAct();else return}beginAct(ab,false);P.rlTry=0;snd.rl()}
+function finishReload(perfect){P.ammo=6;if(perfect){P.emp=3;const t=tipW();burst(t.x,t.y,t.z,GOLD,2.4);if(!AC())dmgNum(P.x,P.y+2.5,P.z,'PERFECT RELOAD','crit');sfx(1320,.12,'triangle',.06,400)}else snd.spin()}
+function tryPerfect(){const a=P.act;if(!a||!a.def||a.def.id!=='reload')return false;if(P.rlTry){return true}P.rlTry=1;const u=a.t/a.d;
+ if(u>=RLW[0]&&u<=RLW[1]){for(const e of a.ev)e.done=true;P.act=null;finishReload(true)}else{a.d+=.45;snd.click();if(!AC())dmgNum(P.x,P.y+2.4,P.z,'JAM','')}return true}
+function ricochet(dm){if(!fire(0,{p:{dmg:0,life:.01}}))return;let cur=aimTarget(22)||nearest(P.x,P.z,14);if(!cur){return}const hit=new Set();let from={x:tipW().x,y:tipW().y,z:tipW().z},n=0,emp=(P.emp||0)>0;
+ const step=()=>{if(!cur||n>=5)return;hit.add(cur);const to={x:cur.x,y:cur.y+(cur.ly||0)+cur.h*.6,z:cur.z};bolt3d(from,to,GOLD);VX.streakPlane((from.x+to.x)/2,(from.y+to.y)/2,(from.z+to.z)/2,FACE(to.x-from.x,to.z-from.z),Math.hypot(to.x-from.x,to.z-from.z),.1,GOLD,.15,1);
+  hitE(cur,dm*P.pm*(n?1:1.3)*(emp?1.5:1),{kb:3,stun:.4,col:GOLD,dx:Math.sin(FACE(to.x-from.x,to.z-from.z)),dz:Math.cos(FACE(to.x-from.x,to.z-from.z))});sparks.emit(to.x,to.y,to.z,GOLD,8,5,.2,.3,0);snd.spin();
+  from=to;n++;const nx=nearest(cur.x,cur.z,7,e=>!hit.has(e));cur=nx;if(cur)TMR.push({t:.07,fn:()=>{if(playOn)step()}})};step()}
+function fan(dm){let n=ammo();if(n<=0){snd.click();startReload();return}const f0=P.face,emp0=P.emp||0;let i=0;
+ const shot=()=>{if(!playOn||P.dead)return;if(ammo()<=0)return;P.face=f0+(Math.random()-.5)*.8;fire(dm,{p:{aim:0,dir:P.face}});P.face=f0;shake(.08);i++;if(ammo()>0)TMR.push({t:.085,fn:shot});else TMR.push({t:.25,fn:()=>{if(playOn&&iam('rook'))startReload()}})};shot()}
+function lobTNT(x,z){const t=tipW(),g=new THREE.Group();g.add(new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,.36,8),new THREE.MeshStandardMaterial({color:0xc4302a,emissive:0x5a1010,emissiveIntensity:.4})),HUB.prim.halo(0xffd24a,.5,0,.22,0,.9));g.rotation.z=.6;g.position.copy(t);RT.root.add(g);
+ const o={g,sx:t.x,sy:t.y,sz:t.z,x,z,t:0,T:.75,fuse:.55,pm:P.pm};TNT.push(o);telegraph(x,z,4,1.3,null,0xffa040)}
+const TNT=[];
+function updTNT(dt){for(let i=TNT.length-1;i>=0;i--){const o=TNT[i];o.t+=dt;const k=Math.min(1,o.t/o.T);if(k<1){o.g.position.set(o.sx+(o.x-o.sx)*k,o.sy+(gY(o.x,o.z)+.2-o.sy)*k+Math.sin(k*PI)*3,o.sz+(o.z-o.sz)*k);o.g.rotation.x+=dt*10}
+  if(Math.random()<.8)sparks.emit(o.g.position.x,o.g.position.y+.22,o.g.position.z,0xffd24a,1,2,.2,.25,1);
+  if(o.t>=o.T+o.fuse){TNT.splice(i,1);o.g.parent&&o.g.parent.remove(o.g);HUB.disposeTree(o.g);if(ABORTING)continue;const x=o.x,z=o.z,y=gY(x,z);
+   const sv=P.pm;P.pm=o.pm;try{slamFx(x,z,0xff8a30,4);VX.explode(v3(x,y+.6,z),2.4,0xff8a30,true,true);aoe(x,z,4,34*P.pm,{kb:11,stun:.9,big:1,launch:7,col:0xff8a30,fire:1});shake(.5);HS=Math.max(HS,.07);snd.thud()}finally{P.pm=sv}}}}
+let DEAD=null;
+function deadeye(){const L=[];for(const e of ENEM){if(!liveE(e))continue;const d=Math.hypot(e.x-P.x,e.z-P.z);if(d>22||!inFront(e,.9))continue;L.push([d,e])}L.sort((a,b)=>a[0]-b[0]);const T=L.slice(0,4).map(x=>x[1]);
+ if(!T.length){toast('No targets in sight','bad');return}for(const e of T){VX.circle(e.x,e.z,e.r+.6,.75,GOLD,'crng',e.y);VX.puff('star',v3(e.x,e.y+(e.ly||0)+e.h+.7,e.z),v3(),.75,.6,.6,GOLD,1)}
+ T.forEach((e,i)=>TMR.push({t:.45+i*.12,fn:()=>{if(!playOn||P.dead||e.dead)return;const t=i%2?tipLW():tipW(),to={x:e.x,y:e.y+(e.ly||0)+e.h*.6,z:e.z};bolt3d(t,to,GOLD);VX.puff('wflare',t,v3(),.08,.5,1.8,0xffe0a0,1);hitE(e,40*P.pm,{crit:true,kb:5,stun:.6,big:1,col:GOLD});snd.eshot();shake(.12)}}))}
+
+/* =====================================================================  ELARA  */
+const TIMEC=0x8fe8ff,TIME2=0xc9a8ff;
+const HIST=[];let histT=0;
+function sampleHist(dt){histT-=dt;if(histT>0)return;histT=.1;HIST.push({t:TIME,x:P.x,y:P.y,z:P.z,hp:P.hp,f:P.face});while(HIST.length&&TIME-HIST[0].t>4.2)HIST.shift()}
+function pastPos(){for(let i=HIST.length-1;i>=0;i--)if(TIME-HIST[i].t>=3)return HIST[i];return HIST[0]||null}
+let ghost=null;
+function updGhost(){const on=playOn&&!P.dead&&iam('elara')&&!(P.cd.rewind>0);const p=on?pastPos():null;
+ if(!p){if(ghost)ghost.visible=false;return}if(!ghost){ghost=new THREE.Group();const s=HUB.prim.halo(TIMEC,1.2,0,1,0,.5),r=new THREE.Mesh(new THREE.RingGeometry(.45,.55,24),new THREE.MeshBasicMaterial({color:TIMEC,transparent:true,opacity:.6,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));r.rotation.x=-PI/2;r.position.y=.08;ghost.add(s,r);ghost.userData.noPick=1;ghost.userData.noOutline=1}
+ if(ghost.parent!==RT.root)RT.root.add(ghost);ghost.visible=true;ghost.position.set(p.x,p.y,p.z);ghost.children[0].material.opacity=.35+.15*Math.sin(TIME*5);ghost.children[1].rotation.z=TIME}
+function rewind(){if(AC()){healP(P.max*.2);ring(P.x,P.z,TIMEC,2.4);return}const p=pastPos();if(!p){toast('Nothing to rewind yet','bad');return}
+ const ox=P.x,oz=P.z;burst(ox,P.y+1,oz,TIMEC,3);ring(ox,oz,TIMEC,3);aoe(ox,oz,3,18*P.mm,{mag:1,kb:6,stun:.6,col:TIMEC});
+ /* trail of after-images back along the path */
+ for(let i=HIST.length-1;i>=0;i--){const h=HIST[i];if(TIME-h.t>3.05)break;if(i%3===0)VX.puff('glow',v3(h.x,h.y+1,h.z),v3(),.5,.9,.4,TIMEC,.5)}
+ P.x=p.x;P.y=p.y;P.z=p.z;P.vy=0;P.kx=P.kz=0;P.face=p.f;if(p.hp>P.hp){const g=p.hp-P.hp;P.hp=Math.min(P.max,p.hp);dmgNum(P.x,P.y+2.2,P.z,'+'+Math.round(g),'heal');try{updateHud()}catch(e){}}
+ P.inv=Math.max(P.inv,.5);burst(P.x,P.y+1,P.z,TIMEC,3.4);ring(P.x,P.z,TIMEC,2.6);snd.rewind();shake(.2);HIST.length=0}
+const BUB=[];
+function timeBubble(x,z,r,T){const y=gY(x,z),m=new THREE.Mesh(new THREE.SphereGeometry(r,28,18,0,PI*2,0,PI/2),new THREE.MeshBasicMaterial({color:TIMEC,transparent:true,opacity:.1,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));
+ const rg=new THREE.Mesh(new THREE.RingGeometry(r-.15,r,48),new THREE.MeshBasicMaterial({color:TIME2,transparent:true,opacity:.7,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));rg.rotation.x=-PI/2;rg.position.y=.1;m.add(rg);m.position.set(x,y,z);m.userData.noPick=1;m.userData.noOutline=1;RT.root.add(m);
+ VX.circle(x,z,r,T,TIMEC,'guard',y);BUB.push({m,x,z,r,T,t:0})}
+function updBubbles(dt){for(let i=BUB.length-1;i>=0;i--){const b=BUB[i];b.t+=dt;const k=b.t<.25?b.t/.25:b.t>b.T-.3?Math.max(0,(b.T-b.t)/.3):1;b.m.scale.setScalar(.2+.8*k);b.m.material.opacity=.08+.05*Math.sin(TIME*4);b.m.rotation.y+=dt*.4;
+  for(const e of ENEM){if(!liveE(e))continue;if(Math.hypot(e.x-b.x,e.z-b.z)<b.r+e.r*.5){e.slowK=Math.max(e.slowK||0,.7);e.slowT=Math.max(e.slowT||0,.3);if(Math.random()<dt*3)VX.puff('spark',v3(e.x,e.y+e.h*.8,e.z),v3(0,.3,0),.6,.3,.08,TIMEC,.8)}}
+  try{for(const q of PRJ){const inn=Math.hypot(q.x-b.x,q.z-b.z)<b.r;if(inn&&!q._tb){q._tb=1;q.vx*=.2;q.vy*=.2;q.vz*=.2;q.life*=3}else if(!inn&&q._tb===1){q._tb=2;q.vx*=5;q.vy*=5;q.vz*=5}}}catch(e){}
+  if(Math.random()<dt*10){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*b.r;VX.puff('spark',v3(b.x+Math.cos(a)*r,gY(b.x,b.z)+.2+Math.random()*b.r*.6,b.z+Math.sin(a)*r),v3(0,.2,0),.9,.3,.06,Math.random()<.5?TIMEC:TIME2,.8)}
+  if(b.t>=b.T){BUB.splice(i,1);try{for(const q of PRJ)if(q._tb===1&&Math.hypot(q.x-b.x,q.z-b.z)<b.r+.5){q._tb=2;q.vx*=5;q.vy*=5;q.vz*=5}}catch(e){}b.m.parent&&b.m.parent.remove(b.m);b.m.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose()})}}}
+let ECHOK=1;
+function echo(){const id=P.lastAb;const K=KIT();const ab=id&&K.ab.find(a=>a.id===id);if(!ab){/* nothing to repeat: a plain chrono burst */const t=aimGround(12,7);ring(t.x,t.z,TIMEC,2.6);aoe(t.x,t.z,2.6,16*P.mm,{mag:1,kb:4,stun:.5,col:TIMEC});snd.tick();return}
+ const d=ab.d0||.6;if(!AC())toast('<b>Echo</b> · '+ab.name);ring(P.x,P.z,TIME2,2.2,.5);
+ for(const [u,fn] of ab.ev)TMR.push({t:.15+u*d,fn:()=>{if(!playOn||P.dead)return;ECHOK=.7;try{fn()}catch(e){console.warn('echo',e)}finally{ECHOK=1}}})}
+
+/* =====================================================================  KITS  */
+const RHO_DESC='A champion wrestler. Grab a foe and hold it up (you take 15% less damage while holding), then Slam it, Suplex it behind you or Hurl it into a crowd. Clothesline Rush, Elbow Drop and Belly Flop flatten everything else. Bosses and giants get a crushing Bear Hug instead.';
+KITS.rhoka={name:'Rhoka',role:'Grappler',desc:RHO_DESC,st:ST(230,38,26,8,.96,.92),imp:'impactMartial',block:{parry:.25,cd:.7},
+ combo:[AX('jab',.42,.48,()=>{melee(10,{type:'h',r:2.5,arc:100,kb:2.5,lunge:1.5,col:RHC});snd.punch()}),AX('cross',.44,.48,()=>{melee(12,{type:'h',flip:1,r:2.5,arc:100,kb:3,lunge:1.5,col:RHC});snd.punch()}),
+  AX('smash',.66,.56,()=>{const x=P.x+Math.sin(P.face)*1.8,z=P.z+Math.cos(P.face)*1.8;slamFx(x,z,RHC,2.4);aoe(x,z,2.4,20*P.pm,{kb:7,stun:.6,big:1,col:RHC});snd.thud();shake(.25)},{cancel:.75})],
+ ab:[
+  AB('grab','Grab / Slam',5,'✊','#ff7a3a','Seize the foe in front of you and lift it overhead for 3s. Press again while holding to SLAM it into the ground: 38 damage, plus 14 to everyone within 3m.','grab',.5,[[.45,RH.grab]],{armor:1}),
+  AB('suplex','Suplex',8,'↶','#ffb04a','Arch back and drive the foe you hold (or the nearest one) into the ground behind you: 46 damage and a 3.2m shockwave.','suplex',.75,[[.55,RH.suplex]],{armor:1}),
+  AB('hurl','Hurl',9,'☄','#ffd24a','Throw the foe you hold (or the nearest one) up to 14m toward your aim. It bowls over everyone in its path (24 damage) and crashes for 30 in 3.4m.','hurl',.7,[[.5,RH.hurl]],{armor:1}),
+  AB('cline','Clothesline Rush',10,'➟','#ff9a5a','Charge 10m with your arm out: every foe you meet takes 22 damage and is knocked flat.','cline',.55,[[0,()=>{dashP(10,.45,{dmg:22*P.pm,r:1.9,inv:.2,trail:RHC,launch:5});snd.grab();VX.dust(P.x,P.z,4,1)}]],{armor:1}),
+  AB('elbow','Elbow Drop',12,'⤓','#ff6a3a','Leap at the targeted spot (up to 10m) and drive your elbow down: 34 damage in 3.4m and a 1.2s stun. Grounded or stunned foes take 50% more.','elbow',.85,[[0,()=>{const t=aimGround(10,7);let d=Math.hypot(t.x-P.x,t.z-P.z);P.face=FACE(t.x-P.x,t.z-P.z)||P.face;d=Math.max(2.5,Math.min(10,d));
+   leapTo(d,.7,()=>{if(!playOn)return;slamFx(P.x,P.z,RHC,3.4);VX.explode(v3(P.x,P.y+.4,P.z),1.3,RHC,false,true);for(const e of ENEM){if(!liveE(e)||!inR(e,P.x,P.z,3.4))continue;const k=(e.stun>0||e.ly>0)?1.5:1;hitE(e,34*P.pm*k,{kb:6,stun:1.2,big:1,col:RHC})}snd.thud();shake(.5);HS=Math.max(HS,.08)})}]]),
+  AB('flop','Belly Flop',16,'◎','#ffc94a','Bounce high and crash down belly-first: 30 damage in 5m, huge knockback, and you shrug off 70% of damage for 2s.','flop',1.0,[[0,()=>{leapTo(1.2,.85,()=>{if(!playOn)return;const x=P.x,z=P.z;slamFx(x,z,RHC,5);slamFx(x,z,0xffd24a,3);VX.explode(v3(x,P.y+.4,z),2,RHC,true,true);aoe(x,z,5,30*P.pm,{kb:12,stun:1.2,big:1,launch:6,col:RHC});startWard(2,RHC);snd.thud();shake(.7);HS=Math.max(HS,.1)})}]],{armor:1})]};
+
+KITS.isolde={name:'Isolde',role:'Frostwarden',desc:'An ice sorceress who controls the battlefield. Her frost adds Chill stacks: five stacks FREEZE a foe, and Glacial Spike or Shatter deal double damage to frozen foes. Ice Wall raises a real wall that blocks enemies and their shots.',
+ st:ST(135,18,10,34,1,1),mana:130,mrate:11,imp:'impactMagic',
+ combo:[AX('cast',.48,.5,()=>frostBolt(11,1)),AX('cast',.48,.5,()=>frostBolt(11,1)),AX('castUp',.62,.55,()=>{const f=aimYaw();for(let i=-1;i<=1;i++)frostBolt(8,1,{dir:f+i*.16,aim:i?0:1,size:.2})},{cancel:.72})],
+ ab:[
+  AB('spike','Glacial Spike',5,'❅','#9be9ff','A spear of ice through every foe in line: 24 damage and 2 Chill. Frozen foes SHATTER for double damage.','cast',.55,[[.42,()=>{proj({sp:40,life:.6,dmg:24*P.mm,col:0xe8ffff,size:.34,r:.6,pierce:99,kb:4,aim:1,mag:1,big:1,shat:1,onHit:e=>chill(e,2)});snd.shard()}]],{mp:18}),
+  AB('wall','Ice Wall',12,'▥','#7fd8ff','Raise a 7m wall of ice at the targeted spot for 6s. It blocks enemies, players and enemy projectiles; foes caught in it are shoved aside and chilled.','castDown',.6,[[.45,()=>{const t=aimGround(12,5);let x=t.x,z=t.z;if(Math.hypot(x-P.x,z-P.z)<2.5){x=P.x+Math.sin(P.face)*3;z=P.z+Math.cos(P.face)*3}iceWall(x,z,P.face,7,6)}]],{mp:25}),
+  AB('nova','Frost Nova',10,'✳','#bff4ff','Burst of cold around you: 16 damage in 5m, 3 Chill and a hard shove.','pray',.6,[[.35,()=>{ring(P.x,P.z,ICE,5);slamFx(P.x,P.z,ICE,5);for(const e of ENEM){if(liveE(e)&&inR(e,P.x,P.z,5)){hitE(e,16*P.mm,{mag:1,kb:8,stun:.4,col:ICE});chill(e,3)}}snd.shatter();shake(.25)}]],{mp:30}),
+  AB('shatter','Shatter',8,'✸','#e8ffff','Detonate the cold: every FROZEN foe within 14m explodes for 40 damage (and 14 to foes around it). Chilled foes take 6 per stack instead.','castUp',.55,[[.4,()=>{let n=0;for(const e of ENEM){if(!liveE(e)||Math.hypot(e.x-P.x,e.z-P.z)>14)continue;
+    if(frozen(e)){n++;shatterFx(e);const x=e.x,z=e.z;hitE(e,40*P.mm,{mag:1,shat:1,kb:5,big:1,col:0xe8ffff});aoe(x,z,3,14*P.mm,{mag:1,kb:5,col:ICE,once:new Set([e])});for(const q of ENEM)if(q!==e&&liveE(q)&&inR(q,x,z,3))chill(q,2)}
+    else if(e.chl&&e.chl.n>0&&TIME<=e.chl.u){n++;const k=e.chl.n;e.chl.n=0;bolt3d({x:P.x,y:P.y+1.4,z:P.z},{x:e.x,y:e.y+e.h*.6,z:e.z},ICE);hitE(e,6*k*P.mm,{mag:1,kb:2,col:ICE})}}
+   if(!n&&!AC())toast('Nothing chilled in range','bad');snd.shatter()}]],{mp:20}),
+  AB('bliz','Blizzard',18,'❄','#cfefff','A 6m storm at the targeted spot for 6s: 5 damage and 1 Chill every half second, and foes inside are slowed.','castUp',.8,[[.45,()=>{const t=aimGround(14,8),x=t.x,z=t.z,mm=P.mm;slamFx(x,z,ICE,6);zone2({x,z,r:6,T:6,tick:.5,col:ICE,tickFn:()=>{const sv=P.mm;P.mm=mm;try{for(const e of ENEM){if(liveE(e)&&inR(e,x,z,6)){hurtEnemy(e,5*mm,0,0,0);chill(e,1)}}}finally{P.mm=sv}},
+    frame:()=>{for(let i=0;i<3;i++){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*5.8;VX.puff('spark',v3(x+Math.cos(a)*r,gY(x,z)+3+Math.random()*2,z+Math.sin(a)*r),v3(1.5,-6,0),.6,.3,.1,0xe8ffff,.9)}}});snd.wall()}]],{mp:45}),
+  AB('farmor','Frost Armor',20,'⛨','#7fd8ff','Encase yourself in ice for 4s: you take 70% less damage, and foes within 4m are chilled twice when it forms.','pray',.5,[[.3,()=>{startWard(4,ICE);fxRing(ICE,4,.5);for(const e of ENEM)if(liveE(e)&&inR(e,P.x,P.z,4))chill(e,2);snd.frost()}]],{mp:25})]};
+
+const SB=(id,s,icon,col,desc)=>AB(id,SONGS[s].n,1,icon,col,desc,'strum',.5,[[.35,()=>setSong(s)]],{mv:.6});
+KITS.cassian={name:'Cassian',role:'Songblade',desc:'A duelling bard with a rapier and a lute. One song always plays: Valor (+20% damage), Warding (-20% damage taken, regeneration) or Haste (+15% speed, faster cooldowns). It covers you and every ally within 9m. Hits build Resonance, and Crescendo spends it in a burst shaped by the current song.',
+ st:ST(165,24,22,22,1.06,1.06),imp:'impactSteel',block:{parry:.3,cd:.6},
+ combo:[AX('slashR',.44,.48,()=>{addRes(melee(9,{type:'h',r:2.7,arc:110,kb:2,lunge:2,col:0xffd27a}));snd.rapier()}),AX('slashL',.44,.48,()=>{addRes(melee(9,{type:'h',flip:1,r:2.7,arc:110,kb:2,lunge:2,col:0xffd27a}));snd.rapier()}),
+  AX('thrust',.55,.48,()=>{lineHit(3.6,1.1,15*P.pm,{kb:5,stun:.3,col:0xffd27a});slashFx('t',0xffd27a,2.6);P.kx+=Math.sin(P.face)*3;P.kz+=Math.cos(P.face)*3;addRes(2);snd.rapier()},{cancel:.7})],
+ ab:[
+  SB('valor','valor','♪','#ff9a4a','Switch to the Song of Valor: you and allies within 9m deal 20% more damage.'),
+  SB('wardS','ward','♫','#7fd8ff','Switch to the Song of Warding: you and allies within 9m take 20% less damage and regenerate 1% health per second.'),
+  SB('hasteS','haste','♬','#9dff7a','Switch to the Song of Haste: you and allies within 9m move and attack 15% faster, and cooldowns tick faster.'),
+  AB('cresc','Crescendo',8,'𝄞','#ffd27a','Spend your Resonance (up to 20, from landing hits): 18 + 2.2 per Resonance damage in 5.5m, plus a bonus from the current song: Valor = damage buff, Warding = shield and heal, Haste = cooldowns slashed.','castUp',.75,[[.45,crescendo]]),
+  AB('lunge','Riposte Lunge',6,'➶','#ffe9a8','Dart 7m forward with the rapier: 24 damage to everything you pass through. Builds 3 Resonance.','thrust',.42,[[0,()=>{dashP(7,.26,{dmg:24*P.pm,r:1.5,inv:.25,trail:0xffd27a});addRes(3);snd.rapier()}]],{armor:1}),
+  AB('disso','Dissonance',12,'≋','#c99aff','A clashing chord in an 8m cone: 22 damage, 0.9s stun and a slow.','shout',.6,[[.35,()=>{const n=cone(8,75,22*P.mm,{mag:1,kb:7,stun:.9,slow:.45,slowT:2.5,col:0xc99aff});slashFx('h',0xc99aff,7);for(let i=0;i<8;i++){const a=P.face+(Math.random()-.5)*1.2,r=1+Math.random()*6;VX.puff('star',v3(P.x+Math.sin(a)*r,P.y+1.2,P.z+Math.cos(a)*r),v3(Math.sin(a)*3,.6,Math.cos(a)*3),.5,.4,.1,0xc99aff,.9)}addRes(n);snd.roar()}]])]};
+
+/* Maeve: one id per slot, two looks (druid / bear) */
+const MD=(id,fnD,fnB)=>()=>{(isBear()?fnB:fnD)()};
+MV.druidCombo=[AX('cast',.5,.5,()=>{proj({sp:24,life:1.1,dmg:10*P.mm,col:LEAF,size:.24,kb:2,aim:1,mag:1,onHit:e=>poison(e,4,3)});snd.claw()}),AX('cast',.5,.5,()=>{proj({sp:24,life:1.1,dmg:10*P.mm,col:LEAF,size:.24,kb:2,aim:1,mag:1,onHit:e=>poison(e,4,3)});snd.claw()}),
+ AX('castUp',.6,.55,()=>{const f=aimYaw();for(let i=-2;i<=2;i++)proj({sp:22,life:.9,dmg:7*P.mm,col:LEAF,size:.18,kb:2,aim:0,dir:f+i*.14,mag:1,onHit:e=>poison(e,3,3)});snd.claw()},{cancel:.72})];
+MV.bearCombo=[AX('slashR',.46,.5,()=>{melee(13,{mag:1,type:'h',r:2.9,arc:130,kb:4,lunge:1.5,col:BEARC});snd.claw()}),AX('slashL',.46,.5,()=>{melee(13,{mag:1,type:'h',flip:1,r:2.9,arc:130,kb:4,lunge:1.5,col:BEARC});snd.claw()}),
+ AX('maul',.66,.56,()=>{const x=P.x+Math.sin(P.face)*1.8,z=P.z+Math.cos(P.face)*1.8;slamFx(x,z,BEARC,2.6);aoe(x,z,2.6,20*P.mm,{mag:1,kb:8,stun:.7,big:1,col:BEARC});snd.thud();shake(.3)},{cancel:.75})];
+const mvRoots=()=>{const t=aimGround(14,8),x=t.x,z=t.z,mm=P.mm;aoe(x,z,3.4,8*P.mm,{mag:1,stun:1.6,kb:0,col:LEAF});slamFx(x,z,LEAF,3.4);snd.shift();
+ zone2({x,z,r:3.4,T:4,tick:.5,col:LEAF,tickFn:()=>{for(const e of ENEM)if(liveE(e)&&inR(e,x,z,3.4)){e.slowK=.75;e.slowT=.6;poison(e,5*mm,1.5)}},frame:()=>{if(Math.random()<.4){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*3.2;VX.puff('spark',v3(x+Math.cos(a)*r,gY(x,z)+.2,z+Math.sin(a)*r),v3(0,2.2,0),.6,.35,.1,LEAF,.9)}}})};
+const mvSpores=()=>{const x=P.x,z=P.z;hotP(.18,6);snd.shift();ring(x,z,LEAF,4.5);
+ zone2({x,z,r:4.5,T:6,tick:.5,col:0xc8ff9a,tickFn:()=>{try{for(const a of ALY)if(a.down<=0&&Math.hypot(a.x-x,a.z-z)<4.5)a.hp=Math.min(a.max,a.hp+a.max*.02)}catch(e){}for(const e of ENEM)if(liveE(e)&&inR(e,x,z,4.5))poison(e,3,1.2)},frame:()=>{if(Math.random()<.5){const a=Math.random()*6.28,r=Math.sqrt(Math.random())*4.3;VX.puff('glow',v3(x+Math.cos(a)*r,gY(x,z)+.3+Math.random(),z+Math.sin(a)*r),v3(0,.8,0),1.2,.35,.25,0xc8ff9a,.6)}}})};
+const mvThorns=()=>{ring(P.x,P.z,LEAF,5);slamFx(P.x,P.z,LEAF,5);for(let i=0;i<14;i++){const a=i/14*6.28;VX.puff('spark',v3(P.x+Math.sin(a)*2.5,P.y+.4,P.z+Math.cos(a)*2.5),v3(Math.sin(a)*8,1,Math.cos(a)*8),.4,.4,.1,LEAF,1)}for(const e of ENEM)if(liveE(e)&&inR(e,P.x,P.z,5)){hitE(e,18*P.mm,{mag:1,kb:6,stun:.4,col:LEAF});poison(e,5,4)}snd.claw()};
+const mvGrowth=()=>{hotP(.26,6);P.mana=Math.min(P.mmax||0,(P.mana||0)+30);fxRing(LEAF,3,.6);VX.heal(P.x,P.y,P.z,LEAF);snd.shift();try{for(const a of ALY)if(a.down<=0&&Math.hypot(a.x-P.x,a.z-P.z)<9)a.hp=Math.min(a.max,a.hp+a.max*.15)}catch(e){}};
+const mvMaul=()=>{const n=cone(3.2,110,34*P.mm,{mag:1,kb:9,stun:.7,big:1,col:BEARC});slashFx('v',BEARC,3);for(const e of ENEM)if(liveE(e)&&inR(e,P.x+Math.sin(P.face)*1.6,P.z+Math.cos(P.face)*1.6,2))poison(e,6,3);snd.thud();shake(.35);HS=Math.max(HS,.06)};
+const mvRoar=()=>{ring(P.x,P.z,BEARC,7);fxRing(BEARC,4,.6);for(const e of ENEM){if(!liveE(e)||!inR(e,P.x,P.z,7))continue;e.aggro=true;e.tauntT=TIME+4;hitE(e,6*P.mm,{mag:1,kb:-3,stun:.9,col:BEARC,dx:(P.x-e.x)/(Math.hypot(P.x-e.x,P.z-e.z)||1),dz:(P.z-e.z)/(Math.hypot(P.x-e.x,P.z-e.z)||1)})}startWard(2.5,BEARC);snd.roar();shake(.35)};
+const mvCharge=()=>{dashP(9,.4,{dmg:24*P.mm,r:1.9,inv:.3,trail:BEARC,launch:4});snd.roar();VX.dust(P.x,P.z,5,1.2)};
+const mvHide=()=>{startWard(3,BEARC);healP(P.max*.15);fxRing(BEARC,3,.5);snd.shift()};
+KITS.maeve={name:'Maeve',role:'Wildshaper',desc:'A druid who fights in two shapes. In druid form she casts poison thorns, roots foes and heals the party with spores. Shapeshift into a hulking bear for claws, a taunting Roar, a bowling Charge, Ironhide and 20% damage reduction.',
+ st:ST(165,22,16,28,1,1),mana:110,mrate:10,imp:'impactMartial',
+ combo:MV.druidCombo,
+ ab:[
+  AB('shift','Shapeshift',2.5,'⇄','#ffd27a','Swap between druid and bear form. Every other ability changes with your shape. Taking bear form heals 8%.','pray',.45,[[.25,()=>{const b=!isBear();setForm(b?'bear':'druid');if(b)healP(P.max*.08);fxRing(b?BEARC:LEAF,3.2,.5);VX.puff('flare',v3(P.x,P.y+1.2,P.z),v3(),.4,1.4,4,b?BEARC:LEAF,.9);snd.shift();shake(.2)}]],{armor:1}),
+  AB('mA','Entangling Roots',8,'❦','#9dff7a','(Druid) Roots burst from the targeted spot (3.4m, 4s): foes are held for 1.6s, slowed and poisoned. (Bear) Maul.','castDown',.6,[[.4,MD('mA',mvRoots,mvMaul)]],{mp:20}),
+  AB('mB','Healing Spores',14,'✿','#c8ff9a','(Druid) Plant spores around you for 6s: you heal 18% over time, allies inside heal 4% per second, foes inside are poisoned. (Bear) Roar.','pray',.6,[[.35,MD('mB',mvSpores,mvRoar)]],{mp:30}),
+  AB('mC','Thornburst',9,'✺','#7dff5a','(Druid) A ring of thorns: 18 damage in 5m and poison. (Bear) Charge.','castUp',.55,[[.35,MD('mC',mvThorns,mvCharge)]],{mp:22}),
+  AB('mD','Wild Growth',18,'❀','#b8ff8a','(Druid) Heal 26% over 6s, restore 30 mana and heal allies within 9m by 15%. (Bear) Ironhide.','pray',.55,[[.3,MD('mD',mvGrowth,mvHide)]],{mp:25})]};
+MV.view={
+ mA:[['Entangling Roots','❦','#9dff7a','Roots burst from the targeted spot (3.4m, 4s): foes are held for 1.6s, slowed and poisoned.','castDown',.6],['Maul','✶','#ffa64a','A crushing two-paw swipe in front of you: 34 damage, a stun and bleeding.','maul',.62]],
+ mB:[['Healing Spores','✿','#c8ff9a','Plant spores around you for 6s: you heal 18% over time, allies inside heal 4% per second, foes inside are poisoned.','pray',.6],['Roar','☊','#ffb04a','Roar at everything within 7m: they are stunned, pulled toward you and turn on you for 4s. You gain a 2.5s ward.','roar',.7]],
+ mC:[['Thornburst','✺','#7dff5a','A ring of thorns: 18 damage in 5m and poison.','castUp',.55],['Charge','➟','#ff9a4a','Bowl forward 9m: 24 damage and a knock-up to everything in your path.','dashK',.42]],
+ mD:[['Wild Growth','❀','#b8ff8a','Heal 26% over 6s, restore 30 mana and heal allies within 9m by 15%.','pray',.55],['Ironhide','⛨','#ffc070','Harden your hide: 70% damage reduction for 3s and heal 15%.','shout',.5]]};
+/* bear-form abilities are free; druid ones cost mana */
+for(const a of KITS.maeve.ab){if(a.mp){const mp=a.mp;Object.defineProperty(a,'mp',{get:()=>isBear()?0:mp,set:()=>{},configurable:true,enumerable:true})}}
+
+KITS.rook={name:'Rook',role:'Gunslinger',desc:'A frontier gunslinger with twin revolvers and a six-round cylinder. Every shot spends a round. Reload, then tap Reload again inside the gold window for a Perfect Reload: a full cylinder and 3 empowered rounds that hit harder and pierce. Ricochet, Fan the Hammer, Quickdraw, Deadeye and Dynamite.',
+ st:ST(140,16,26,8,1.08,1.1),imp:'impactSteel',eva:.04,
+ combo:[AX('shootR',.36,.38,()=>{fire(13)}),AX('shootL',.36,.38,()=>{fire(13,{left:1})}),AX('shootB',.5,.42,()=>{fire(12);TMR.push({t:.05,fn:()=>{if(playOn&&!P.dead)fire(12,{left:1})}})},{cancel:.7})],
+ ab:[
+  AB('reload','Reload',.3,'⟳','#ffd24a','Reload the cylinder (1.3s; you can move). Tap Reload again inside the gold window for a PERFECT RELOAD: instant, plus 3 empowered rounds. Miss it and the gun jams for a moment.','reload',1.3,[[.99,()=>{finishReload(false)}]],{mv:.85,aim:false}),
+  AB('rico','Ricochet',7,'⟡','#ffd24a','One round that bounces between up to 5 foes, 18 damage each (more with an empowered round).','shootR',.4,[[.38,()=>ricochet(18)]]),
+  AB('fan','Fan the Hammer',10,'✺','#ffb24a','Empty the whole cylinder in a heartbeat across the area in front of you, 14 damage per round, then reload.','fan',.75,[[.1,()=>fan(14)]],{mv:.4}),
+  AB('qdraw','Quickdraw',6,'➤','#ffe08a','Roll sideways out of trouble (brief invulnerability), slip 2 rounds into the cylinder and make the next one empowered.','evade',.4,[[0,()=>{const s=Math.random()<.5?1:-1;dashP(6,.3,{face:P.face+s*PI/2,keepFace:1,inv:.35,trail:GUNC});P.ammo=Math.min(6,ammo()+2);P.emp=Math.max(P.emp||0,1);snd.spin();VX.snd('dodge')}]],{armor:1}),
+  AB('dead','Deadeye',14,'◎','#ffd24a','Mark up to 4 foes in front of you, then put a guaranteed critical round into each: 40 damage. Uses no ammo.','deadeye',1.1,[[.2,deadeye]]),
+  AB('dyn','Dynamite',12,'✹','#ff8a30','Lob a stick of dynamite: after a short fuse it blows up for 34 damage in 4m and launches foes.','throw',.55,[[.3,()=>{const t=aimGround(14,9);lobTNT(t.x,t.z)}]],{mv:.4})]};
+
+KITS.elara={name:'Elara',role:'Chronomancer',desc:'A time mage. Rewind to where you stood 3 seconds ago with the health you had then (a ghost marks the spot). Time Bubble slows foes and freezes their projectiles in place, Haste speeds up the whole party, Time Stop freezes everything around you, and Echo repeats your last spell.',
+ st:ST(130,14,10,34,1.05,1),mana:140,mrate:12,imp:'impactMagic',
+ combo:[AX('cast',.46,.5,()=>{proj({sp:28,life:1.1,dmg:11*P.mm,col:TIMEC,size:.24,kb:2,aim:1,mag:1});snd.tick()}),AX('cast',.46,.5,()=>{proj({sp:28,life:1.1,dmg:11*P.mm,col:TIME2,size:.24,kb:2,aim:1,mag:1,purple:1});snd.tick()}),
+  AX('castUp',.6,.55,()=>{proj({sp:18,life:1.4,dmg:18*P.mm,col:TIMEC,size:.36,kb:3,aim:1,mag:1,pierce:2,slow:.5,slowT:2});snd.tick()},{cancel:.72})],
+ ab:[
+  AB('rewind','Rewind',16,'⟲','#8fe8ff','Snap back to where you were 3 seconds ago and take back any health you lost since. The spot you leave bursts for 18 damage.','pray',.35,[[.15,rewind]],{mp:20,armor:1}),
+  AB('bubble','Time Bubble',14,'◍','#8fe8ff','A 6m dome of slowed time at the targeted spot for 5s: foes inside move 70% slower and enemy projectiles crawl.','castDown',.6,[[.4,()=>{const t=aimGround(14,6);timeBubble(t.x,t.z,6,5);snd.tick()}]],{mp:35}),
+  AB('haste','Haste',16,'≫','#9dffcf','For 6s you and every ally within 10m move and attack faster, and current cooldowns drop by 30%.','castUp',.5,[[.3,()=>{startHaste(6);fxRing(0x9dffcf,4,.6);try{for(const a of ALY)if(a.down<=0&&Math.hypot(a.x-P.x,a.z-P.z)<10&&a.ps){a.ps.hasteT=6;for(const id in a.ps.cd)if(a.ps.cd[id]>0)a.ps.cd[id]*=.7}}catch(e){}snd.tick()}]],{mp:30}),
+  AB('echo','Echo',10,'⧖','#c9a8ff','Repeat the last ability you cast (not Rewind or Echo) at 70% power.','cast',.4,[[.2,echo]],{mp:20}),
+  AB('tstop','Time Stop',22,'⏸','#c9a8ff','Stop time around you: every foe within 7m is frozen in place for 2.2s (bosses 1s) and takes 14 damage.','pray',.7,[[.4,()=>{ring(P.x,P.z,TIME2,7);slamFx(P.x,P.z,TIME2,7);for(const e of ENEM){if(!liveE(e)||!inR(e,P.x,P.z,7))continue;hitE(e,14*P.mm,{mag:1,kb:0,stun:e.boss?1:2.2,big:1,col:TIME2});VX.circle(e.x,e.z,e.r+.5,e.boss?1:2.2,TIME2,'crng',e.y)}snd.rewind();shake(.3)}]],{mp:45}),
+  AB('accel','Accelerate',7,'⟿','#8fe8ff','Blink 8m forward through time, damaging foes at both ends (10).','evade',.3,[[0,()=>{const t=aimGround(8,7),ox=P.x,oz=P.z;let dx=t.x-ox,dz=t.z-oz,d=Math.hypot(dx,dz);if(d<3){dx=Math.sin(P.face)*6;dz=Math.cos(P.face)*6}else if(d>8){dx*=8/d;dz*=8/d}
+   ring(ox,oz,TIMEC,2.4);aoe(ox,oz,2.4,10*P.mm,{mag:1,kb:4,stun:.4,col:TIMEC});safeTp(ox+dx,oz+dz);P.inv=Math.max(P.inv,.35);ring(P.x,P.z,TIMEC,2.4);aoe(P.x,P.z,2.4,10*P.mm,{mag:1,kb:4,stun:.4,col:TIMEC});snd.tick()}]],{mp:15,armor:1})]};
+for(const k of KEYS){const K=KITS[k];K.key=k;K.mana=K.mana||0;NEWK.push(k)}
+Object.assign(TRK,{rhoka:['tip','tl'],isolde:['tip'],cassian:['tip'],maeve:['tip'],rook:[],elara:['tip']});
+
+/* =====================================================================  ENGINE HOOKS  */
+/* per-actor state follows hired allies */
+try{AKF.push('ammo','emp','held','form','song','res','lastAb','rlTry')}catch(e){}
+/* damage dealt: songs, shatter, echo */
+{const _h=hitE;hitE=function(e,dmg,o){if(dmg>0&&e&&!e.dead){o=o||{};let k=ECHOK;
+  if(AUR.length&&inSong('valor',P.x,P.z))k*=1.2;
+  if(o.shat&&frozen(e)){k*=2.2;e.frzT=.01;e.stun=Math.min(e.stun||0,.5);shatterFx(e);dmgNum(e.x,e.y+(e.ly||0)+e.h+.9,e.z,'SHATTER','crit')}
+  if(iam('rhoka')&&(e.stun>0||e.ly>.05)&&!o.silent)k*=1.1;
+  dmg*=k}
+ return _h.call(this,e,dmg,o)}}
+/* damage taken: bear form, holding a foe, warding song */
+{const _p=hurtPlayer;hurtPlayer=function(dmg,sx,sz,kb,unblock){if(dmg>0){if(iam('maeve')&&isBear())dmg*=.8;if(iam('rhoka'))dmg=rhokaPassive(dmg);if(AUR.length&&inSong('ward',P.x,P.z))dmg*=.8}return _p.call(this,dmg,sx,sz,kb,unblock)}}
+/* Rook's second Reload tap = perfect-reload attempt; Elara remembers what she cast for Echo */
+{const _u=useAbility;useAbility=function(i){let ab=null;try{ab=KIT().ab[i]}catch(e){}
+  if(ab&&ab.id==='reload'&&iam('rook')){if(tryPerfect())return;if(ammo()>=6){if(!P.act){snd.spin();toast('Cylinder full','')}return}}
+  const before=ab?P.cd[ab.id]||0:0;const r=_u.apply(this,arguments);
+  try{if(ab&&iam('elara')&&ab.id!=='echo'&&ab.id!=='rewind'&&(P.cd[ab.id]||0)>before)P.lastAb=ab.id}catch(e){}return r}}
+/* Rook can't swing while the cylinder is being reloaded (the act already blocks the attack); an empty gun reloads instead of shooting */
+/* dashes that knock foes up (Clothesline, Charge): the engine's dash damage + our launch */
+{const _d=dashP;dashP=function(dist,time,o){const r=_d.apply(this,arguments);try{if(o&&o.launch&&P.dash){const L=o.launch,D=P.dash,col=o.trail||0xffffff;D._ln=L;D._col=col}}catch(e){}return r}}
+function dashLaunch(){const D=P.dash;if(!D||!D._ln)return;for(const e of ENEM){if(!liveE(e)||D.once&&D.once.has(e)&&D._l2&&D._l2.has(e))continue;if(Math.hypot(e.x-P.x,e.z-P.z)<(D.r||1.6)+e.r){D._l2=D._l2||new Set();if(D._l2.has(e))continue;D._l2.add(e);if(!e.boss&&massOf(e)<2.2&&!isPup(e)){e.lvy=D._ln;e.ly=Math.max(e.ly||0,.01);e.stun=Math.max(e.stun||0,1)}}}}
+/* per frame */
+let hudT=0;
+{const _k=updKit2;updKit2=function(dt){_k(dt);try{frame(dt)}catch(e){console.warn('[champs6]',e)}}}
+{const _k=killKit2;killKit2=function(){_k();try{reset()}catch(e){}}}
+function frame(dt){
+ updFly(dt);updWalls(dt);updTNT(dt);updBubbles(dt);chillFx(dt);updSongs(dt);dashLaunch();
+ if(playOn&&!P.dead){updHeld({x:P.x,z:P.z,f:P.face,r:P.r},P);
+  if(iam('elara'))sampleHist(dt);
+  if(iam('maeve')){const want=isBear();if(HR&&HR._bear!==want)setBearVis(HR,want)}
+  if(iam('rhoka')){const h=holdOf(),st=H.STANCE[Hero.key];const want=h?'hold':'base';if(st&&st._m!==want){H.STANCE[Hero.key]=Object.assign({_m:want},h?ST_HOLD:STB.rhoka)}}}
+ updGhost();
+ try{for(const a of ALY){if(a.down>0||!a.ps)continue;if(a.ps.held)updHeld({x:a.x,z:a.z,f:a.f,r:.5},a.ps);if(a.R&&a.R.bear)setBearVis(a.R,a.ps.form==='bear')}}catch(e){}
+ try{if(typeof NET!=='undefined'&&NET.remote)for(const r of NET.remote.values())if(r.rig&&r.rig.bear)setBearVis(r.rig,!!((r.fl|0)&16))}catch(e){}
+ hudT-=dt;if(hudT<=0){hudT=.05;hud()}}
+function reset(){for(const w of WALLS)killWall(w);WALLS.length=0;for(const o of TNT){o.g.parent&&o.g.parent.remove(o.g);HUB.disposeTree(o.g)}TNT.length=0;FLY.length=0;
+ for(const b of BUB){b.m.parent&&b.m.parent.remove(b.m)}BUB.length=0;HIST.length=0;if(ghost&&ghost.parent)ghost.parent.remove(ghost);P.held=null;P.rlTry=0;
+ for(const e of ENEM)e.chl=null}
+/* new champion picked: fresh per-hero state */
+{const _a=applyKit;applyKit=function(){const r=_a.apply(this,arguments);try{if(!AC()){const k=KB();P.held=null;P.res=0;P.lastAb=null;P.armorB=0;
+  if(k==='rook'){P.ammo=6;P.emp=0}if(k==='cassian'&&!P.song)P.song='valor';
+  if(k==='maeve'){setForm(P.form==='bear'?'bear':'druid',true)}else if(H.STANCE.maeve)H.STANCE.maeve=Object.assign({},STB.maeve);
+  if(k==='rhoka')H.STANCE[Hero.key]=Object.assign({_m:'base'},STB.rhoka);HIST.length=0}}catch(e){console.warn(e)}return r}}
+
+/* =====================================================================  HUD (desktop + touch)  */
+const css=document.createElement('style');css.textContent=`
+#c6hud{position:fixed;left:16px;top:176px;z-index:11;pointer-events:none;display:none;font:700 12px/1.25 system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000a;text-align:left;letter-spacing:.04em;white-space:nowrap}
+#c6hud.on{display:block}
+#c6hud .c6t{font-size:11px;opacity:.9;text-transform:uppercase;margin-bottom:3px}
+#c6hud .c6p{display:inline-block;width:11px;height:24px;margin:0 2px;border-radius:6px 6px 3px 3px;background:#2a2218cc;border:1px solid #ffb24a66;vertical-align:bottom}
+#c6hud .c6p.f{background:linear-gradient(#ffe7b0,#c98a3a);border-color:#ffd27a}
+#c6hud .c6p.e{background:linear-gradient(#fffbe0,#ffcf3a);border-color:#fff2a0;box-shadow:0 0 9px #ffd24a}
+#c6hud .c6b{width:190px;height:9px;margin:5px 0 0;border-radius:5px;background:#000a;position:relative;overflow:hidden;border:1px solid #ffffff33}
+#c6hud .c6b i{position:absolute;top:0;bottom:0;left:0;background:#ffe9b0}
+#c6hud .c6b s{position:absolute;top:0;bottom:0;background:#ffd24a99;box-shadow:inset 0 0 0 1px #fff5}
+#c6hud .c6g{display:inline-block;padding:3px 10px;border-radius:12px;background:#000a;border:1px solid currentColor}
+html.mob #c6hud{left:50%;top:140px;transform:translateX(-50%);text-align:center;font-size:calc(var(--u)*13)}
+html.mob #c6hud .c6b{margin:calc(var(--u)*5) auto 0}
+html.mob #c6hud .c6t{font-size:calc(var(--u)*11)}
+html.mob #c6hud .c6p{width:calc(var(--u)*11);height:calc(var(--u)*24)}
+html.mob #c6hud .c6b{width:calc(var(--u)*190);height:calc(var(--u)*10);margin:calc(var(--u)*5) auto 0}
+#abil .ab.c6on{filter:brightness(1.35) drop-shadow(0 0 6px currentColor)}
+#abil .ab.c6on>div{outline:2px solid currentColor;outline-offset:-4px}
+html.mob #abil .ab.c6on>div{outline-offset:-6px}`;document.head.appendChild(css);
+let hudEl=null,hudS='';
+function hud(){if(!hudEl){hudEl=document.createElement('div');hudEl.id='c6hud';document.body.appendChild(hudEl)}
+ let s='';const k=(()=>{try{return KB()}catch(e){return''}})(),live=playOn&&!P.dead;
+ if(live&&k==='rook'){const a=ammo(),em=P.emp||0;let p='';for(let i=0;i<6;i++)p+=`<span class="c6p ${i<a?(i>=a-em?'e':'f'):''}"></span>`;
+  const A=P.act,rl=A&&A.def&&A.def.id==='reload';s=`<div class="c6t">${rl?'Reloading — tap Reload in the gold!':em?em+' empowered':'Cylinder'}</div>${p}`;
+  if(rl){const u=Math.min(1,A.t/A.d);s+=`<div class="c6b"><s style="left:${RLW[0]*100}%;width:${(RLW[1]-RLW[0])*100}%"></s><i style="width:${(u*100).toFixed(1)}%"></i></div>`}}
+ else if(live&&k==='cassian'){const S=SONGS[P.song||'valor'],r=res();s=`<div class="c6g" style="color:${S.h}">${S.n} · ${S.fx}</div><div class="c6b"><i style="width:${r/20*100}%;background:${S.h}"></i></div><div class="c6t" style="margin-top:2px">Resonance ${r}/20</div>`}
+ else if(live&&k==='maeve'){s=isBear()?'<div class="c6g" style="color:#ffb04a">🐻 Bear form · −20% damage taken</div>':'<div class="c6g" style="color:#9dff7a">🌿 Druid form</div>'}
+ else if(live&&k==='rhoka'){const h=holdOf();if(h)s=`<div class="c6g" style="color:#ff9a5a">HOLDING · Grab again to Slam · Suplex · Hurl</div><div class="c6b"><i style="width:${Math.max(0,(h.until-TIME)/3*100)}%;background:#ff9a5a"></i></div>`}
+ else if(live&&k==='elara'){const p=pastPos();if(p&&!(P.cd.rewind>0)){const g=Math.round(Math.max(0,p.hp-P.hp));s=`<div class="c6g" style="color:#8fe8ff">⟲ Rewind ready${g>0?' · +'+g+' HP':''}</div>`}
+  if(P.lastAb&&!(P.cd.echo>0)){const ab=KIT().ab.find(a=>a.id===P.lastAb);if(ab)s+=`<div class="c6t" style="margin-top:3px;color:#c9a8ff">Echo: ${ab.name}</div>`}}
+ if(s!==hudS){hudS=s;hudEl.innerHTML=s;hudEl.classList.toggle('on',!!s)}
+ /* light up the active song on the hotbar */
+ try{if(k==='cassian'&&P.hb){const ids={valor:'valor',ward:'wardS',haste:'hasteS'}[P.song||'valor'];const K=KIT();K.ab.forEach((a,i)=>{const el=document.querySelector('#abil .ab[data-i="'+i+'"]');if(el)el.classList.toggle('c6on',a.id===ids)})}}catch(e){}}
+
+/* =====================================================================  REGISTRATION IN THE OTHER TABLES  */
+try{STORDER.push(...KEYS)}catch(e){}
+try{HERO_BASES.push(...KEYS)}catch(e){}
+try{Object.assign(UNL.PRICE,{isolde:300,cassian:300,rook:450,rhoka:450,maeve:600,elara:750})}catch(e){}
+try{Object.assign(WJ.TIER,{rook:.6,cassian:.6})}catch(e){}
+try{Object.assign(AKS,{rhoka:{rng:2.4},isolde:{rng:12,keep:6.5},cassian:{rng:2.7},maeve:{rng:9,keep:4.5},rook:{rng:12,keep:6},elara:{rng:11,keep:6.5}})}catch(e){}
+try{Object.assign(AKAI,{
+ rhoka:[['flop',c=>c.n6>=4],['elbow',c=>c.g>3&&c.g<10],['suplex',c=>c.g<2.6&&!c.boss],['hurl',c=>c.g<2.6&&c.n9>=3&&!c.boss],['cline',c=>c.g>3&&c.g<9],['grab',c=>c.g<2.6]],
+ isolde:[['farmor',c=>c.me<.5],['shatter',c=>c.T.frzT>0||c.nT>=3],['nova',c=>c.n6>=3||c.g<2.5],['bliz',c=>c.nT>=3||c.boss],['wall',c=>c.g<6&&c.n9>=3],['spike',c=>c.g<14]],
+ cassian:[['wardS',c=>c.pm<.5&&c.ps.song!=='ward'],['valor',c=>c.pm>=.5&&c.ps.song!=='valor'],['cresc',c=>(c.ps.res|0)>=12],['disso',c=>c.n6>=3||c.win],['lunge',c=>c.g>3&&c.g<8]],
+ maeve:[['mB',c=>c.pm<.6||c.n6>=3],['mD',c=>c.me<.5],['mA',c=>c.nT>=2||c.win],['mC',c=>c.n6>=2]],
+ rook:[['reload',c=>(c.ps.ammo===undefined?6:c.ps.ammo)<=0],['dead',c=>c.n9>=3||c.boss],['fan',c=>c.g<6&&c.n6>=2],['rico',c=>c.n9>=2],['dyn',c=>c.nT>=3],['qdraw',c=>c.g<2.5]],
+ elara:[['tstop',c=>c.n6>=4],['bubble',c=>c.nT>=3||c.boss],['haste',c=>c.boss||c.n9>=4],['accel',c=>c.g<2.5],['echo',c=>c.n9>=2]]})}catch(e){}
+try{Object.assign(ALR,{rhoka:{t:'m',sp:'slam',col:0xff7a3a,hpm:1.35,dmm:1.1,spd:5.2},cassian:{t:'m',sp:'flurry',col:0xffd27a,hpm:1.05},maeve:{t:'r',sp:'heal',col:0x9dff7a,hpm:1.1},isolde:{t:'r',sp:'nova',col:0x9be9ff},rook:{t:'r',sp:'volley',col:0xffb24a,hpm:.9},elara:{t:'r',sp:'nova',col:0x8fe8ff}})}catch(e){}
+try{Object.assign(NPCD,{
+ rhoka:{g:["Rhoka cracks her knuckles and grins. “You've got the look of someone who needs a crowd thrown around.”","“Undefeated in the Ember pits. Forty-one bouts. The Rift is just a bigger ring.”"],r:["“Back for round two?”"],w:["“Point me at the biggest one.”"],t:[["Why fight the Rift?",["“It cheats. It doesn't tap out. I'd like to teach it some manners.”"]]],p:["“Pay my purse and I'll fight your bouts.”"],h:["“Ding ding. Let's go.”"],f:["“Purse is paid. I'm with you.”"],n:["“No purse, no bout.”"]},
+ isolde:{g:["Frost creeps along the stones as Isolde turns. “Careful. Everything near me gets cold.”","“I keep the northern wards. The Rift melted three of them. I'd like them back.”"],r:["“Still warm? Good.”"],w:["“Stay behind my walls.”"],t:[["What is Chill?",["“Cold that remembers. Enough of it and a thing simply stops. Then it breaks.”"]]],p:["“The ice is free. My time is not.”"],h:["“Very well. Mind your footing.”"],f:["“Our pact holds.”"],n:["“Come back with more stars.”"]},
+ cassian:{g:["Cassian sweeps off his hat in a bow. “A hero! Every song needs one. I've been short of a verse.”","“I fight in tempo. Stay in the music and you'll hit harder, bleed less, move quicker. Your choice of song.”"],r:["“The chorus returns!”"],w:["“Lead on. I'll keep the beat.”"],t:[["Why a lute?",["“Because a sword alone has never once made anyone braver. A song has.”"]]],p:["“A bard must eat. Stars will do.”"],h:["“Splendid! I'll write you a verse.”"],f:["“Already paid. Encore!”"],n:["“Alas, art isn't free.”"]},
+ maeve:{g:["Maeve's eyes catch the light like an animal's. “The grove sent me. It doesn't like what the Rift does to roots.”","“I'm gentle until I'm not. You'll know the difference. It has fur.”"],r:["“The grove remembers you.”"],w:["“Run with me.”"],t:[["The bear?",["“She's me too. The angrier half.”"]]],p:["“The grove asks for a gift. Stars will do.”"],h:["“Good. Let's go hunting.”"],f:["“You've given enough.”"],n:["“Not yet.”"]},
+ rook:{g:["Rook spins a revolver and holsters it in one motion. “Six rounds. I make every one count.”","“Rift crawlers hunt in packs. So do I, when the pay's right.”"],r:["“Still breathing. Good.”"],w:["“I'll cover the flank.”"],t:[["Perfect reload?",["“Timing. You feel the cylinder seat. Then the next three rounds go through a wall.”"]]],p:["“Lead costs money. So do I.”"],h:["“Deal. I'm your gun.”"],f:["“Contract's still good.”"],n:["“Come back with the fee.”"]},
+ elara:{g:["Elara's halo of gears turns slowly behind her. “I've seen this conversation before. You're about to ask for help.”","“Time is a river here. The Rift is a dam. I intend to break it.”"],r:["“Exactly on time.”"],w:["“I'll keep the clock on our side.”"],t:[["Can you undo mistakes?",["“Three seconds' worth. It is usually enough.”"]]],p:["“Even time has a price. Stars.”"],h:["“Then it is already done.”"],f:["“Our bargain was always going to hold.”"],n:["“Not yet. Soon.”"]}})}catch(e){}
+
+/* training grounds, one per champion */
+try{const A=TRAIN.A;
+ const yard=(H2,id,name,x,z,n)=>{H2.dummies(id,name,x,z,n,{col:1,span:20,r:12});H2.lbl(name.toUpperCase()+' · free practice',x,z+9,3.4)};
+ A.rhoka={title:'The Pit',theme:'ember',mood:'dusk',ground:'dirt',dps:[240,420,660],fx:{fireflies:0,dust:1,mist:0,leaves:0,snow:0,ash:1},
+  blurb:'A grappler: grab a foe, then slam, suplex or hurl it. The Pit is a ring full of things to throw.',
+  learn:['Grab first, then pick the finisher: Slam (Grab again), Suplex or Hurl.','Hurl a foe into a crowd: everyone in its path is knocked flat.','Elbow Drop deals 50% more to foes that are already stunned or airborne.'],
+  build(H2){H2.ring('torchpole',0,-4,40,12);yard(H2,'ring','Grapple Ring',-40,-14,5);
+   H2.trial('bowl','Bowling Alley','Hurl foes into the packs.',40,-14,[{k:'mutant',n:10,ring:7},{k:'brute',n:2,ring:4}],[20,30,46],{r:14});
+   H2.trial('pile','Pile-Up','Survive the crowd with Belly Flop and Clothesline.',-40,24,[{k:'mutant',n:12,ring:6},{k:'razor',n:3,ring:10}],[22,34,52],{r:14})}};
+ A.isolde={title:'Rimeglass Hollow',theme:'aether',mood:'night',ground:'stone',dps:[200,360,560],fx:{fireflies:0,dust:0,mist:1,leaves:0,snow:1,ash:0},
+  blurb:'A frostwarden: stack Chill to freeze foes, then Shatter them. Wall off packs with Ice Wall.',
+  learn:['Five Chill stacks freeze a foe. Frost Nova adds three at once.','Shatter and Glacial Spike deal double damage to frozen foes.','Ice Wall blocks enemies and their projectiles: split a pack in two.'],
+  build(H2){yard(H2,'frost','Frost Range',-40,-14,5);
+   H2.trial('shat','Freeze & Shatter','Freeze the pack, then shatter it.',40,-14,[{k:'mutant',n:10,ring:6}],[18,28,44],{r:14});
+   H2.trial('wallz','Hold the Line','Wall them off and pick them apart.',-40,24,[{k:'mutant',n:6,ring:10},{k:'razor',n:4,ring:12}],[24,36,54],{r:15})}};
+ A.cassian={title:'The Amphitheatre',theme:'codex',mood:'dusk',ground:'stone',dps:[230,410,640],
+  blurb:'A songblade: keep the right song playing, build Resonance with hits and spend it on Crescendo.',
+  learn:['Valor for damage, Warding when you are hurt, Haste to reposition and cycle cooldowns.','Every landed hit adds Resonance (up to 20). Crescendo spends all of it.','Riposte Lunge passes through foes and builds 3 Resonance.'],
+  build(H2){H2.ring('pillar',0,-4,46,14);yard(H2,'duel','Duelling Floor',-40,-14,5);
+   H2.trial('encore','Encore','Build Resonance, then Crescendo the crowd.',40,-14,[{k:'mutant',n:10,ring:7}],[20,30,46],{r:14});
+   H2.trial('finale','Grand Finale','A longer fight: change songs as it turns.',-40,24,[{k:'mutant',n:8,ring:9},{k:'brute',n:2,ring:6}],[26,40,60],{r:15})}};
+ A.maeve={title:'Thornwild',theme:'jade',mood:'dawn',ground:'grass',dps:[210,380,600],fx:{fireflies:1,dust:0,mist:1,leaves:1,snow:0,ash:0},
+  blurb:'A wildshaper: root and poison from range in druid form, then shift into the bear to brawl.',
+  learn:['Shapeshift swaps every ability. Bear form abilities cost no mana.','Roar pulls foes in and makes them turn on you: protect your allies.','Healing Spores heal allies standing in them, too.'],
+  build(H2){H2.ring('bigpine',0,-4,48,16);yard(H2,'grove','Grove Range',-40,-14,5);
+   H2.trial('root','Root & Rend','Root the pack, then maul it as a bear.',40,-14,[{k:'mutant',n:9,ring:7},{k:'razor',n:3,ring:10}],[20,32,48],{r:14});
+   H2.trial('den','The Den','Hold your ground against a surrounding pack.',-40,24,[{k:'mutant',n:12,ring:6}],[22,34,52],{r:13})}};
+ A.rook={title:'Dustwater Range',theme:'ember',mood:'dawn',ground:'dirt',dps:[240,430,680],fx:{fireflies:0,dust:1,mist:0,leaves:0,snow:0,ash:0},
+  blurb:'A gunslinger: six rounds, then reload. Nail the Perfect Reload window for empowered rounds.',
+  learn:['Tap Reload a second time inside the gold window: instant reload and 3 empowered rounds.','Ricochet bounces through a pack; Deadeye picks off four targets.','Quickdraw rolls you to safety and loads 2 rounds.'],
+  build(H2){H2.ring('barrels',0,-4,44,10);yard(H2,'targets','Shooting Gallery',-40,-14,6);
+   H2.trial('draw','High Noon','Clear the pack without being swarmed.',40,-14,[{k:'mutant',n:10,ring:10},{k:'razor',n:3,ring:12}],[20,30,46],{r:15});
+   H2.trial('gang','The Gang','Waves come at you: mind your ammo.',-40,24,[{k:'mutant',n:6,ring:10},{k:'mutant',n:6,ring:10,d:6},{k:'brute',n:2,ring:8,d:12}],[28,40,60],{r:15})}};
+ A.elara={title:'Clockwork Observatory',theme:'aether',mood:'night',ground:'stone',dps:[200,360,560],
+  blurb:'A chronomancer: slow time, haste yourself, undo mistakes with Rewind and double up with Echo.',
+  learn:['The ghost on the ground shows where Rewind will take you.','Time Bubble slows foes and their projectiles: stand inside to dodge shots.','Echo repeats your last ability at 70% power.'],
+  build(H2){H2.ring('pillar',0,-4,46,12);yard(H2,'clock','Chronometer Range',-40,-14,5);
+   H2.trial('bub','Bubble Trouble','Slow the pack and pick it apart.',40,-14,[{k:'mutant',n:10,ring:8},{k:'razor',n:3,ring:11}],[20,30,46],{r:14});
+   H2.trial('loop','Time Loop','Survive: rewind out of trouble.',-40,24,[{k:'mutant',n:12,ring:7}],[24,36,54],{r:14})}}}catch(e){console.warn('[champs6] training',e)}
+
+return{KEYS,chill,setForm,setSong,ammo:()=>ammo(),walls:WALLS,bubbles:BUB,auras:()=>AUR,fire,iceWall,timeBubble,setBearVis}})();
 </script>
 <script id="nca-atlas">
 /* ============ ATLAS · the Hub Atlas — a showcase of every player's published hub (Campaign + Multiplayer) ============

@@ -75,7 +75,7 @@ function safeEq(a, b) { try { const x = Buffer.from(String(a)), y = Buffer.from(
 function seeded(seed) { let h = 1779033703 ^ seed.length; for (let i = 0; i < seed.length; i++) { h = Math.imul(h ^ seed.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return () => { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
 
 /* ---------------------------------------------------------------- game data */
-const HEROES = ['starr', 'aurealius', 'willow', 'akira', 'talos', 'dante', 'seraphine', 'vesper', 'brigid', 'fenn', 'leander', 'nyx', 'moros', 'alita'];
+const HEROES = ['starr', 'aurealius', 'willow', 'akira', 'talos', 'dante', 'seraphine', 'vesper', 'brigid', 'fenn', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara'];
 const GUILD_ICONS = ['⚔', '🛡', '🏹', '🔥', '❄', '⚡', '🌿', '💀', '👑', '🐉', '🌙', '☀', '🦅', '🐺', '💎', '🔱'];
 const G_LV = [0, 120, 480, 1200, 2700, 5400, 9600, 15600, 24000, 36000]; // total member playtime (minutes) needed for level 1..10
 const guildLevel = g => { let l = 1; for (let i = 1; i < G_LV.length; i++) if (g.play >= G_LV[i]) l = i + 1; return l; };
@@ -128,14 +128,17 @@ function profileOf(p, viewer) {
 
 /* ---------------------------------------------------------------- rooms */
 function hubRoom() { for (const r of rooms.values()) if (r.scene === 'hub' && r.kind === 'hub' && r.members.size < HUB_CAP) return r; const r = { id: 'hub#' + (misc.seq++), scene: 'hub', kind: 'hub', cap: HUB_CAP, members: new Set() }; rooms.set(r.id, r); return r; }
+/* shared enemies (client COOP): every room has ONE host that runs the real enemy AI — the first member; when the host leaves,
+   the longest-present remaining member takes over and the room is told ({t:'host'}). */
+function pickHost(r) { const h = r.members.values().next().value || null; if (h !== r.host) { r.host = h; if (h) sendRoom(r, { t: 'host', id: h }); } }
 function leaveRoom(c) {
   const r = c.room; if (!r) return; r.members.delete(c.id); c.room = null; sendRoom(r, { t: 'leave', id: c.id });
-  if (!r.members.size) rooms.delete(r.id);
+  if (!r.members.size) { rooms.delete(r.id); return; } if (r.host === c.id || !r.members.has(r.host)) pickHost(r);
 }
 function joinRoom(c, room, scene) {
-  if (c.room === room) return; leaveRoom(c); room.members.add(c.id); c.room = room; c.scene = scene;
+  if (c.room === room) return; leaveRoom(c); room.members.add(c.id); c.room = room; c.scene = scene; if (!room.host || !room.members.has(room.host)) room.host = c.id;
   const list = []; for (const id of room.members) { const o = online.get(id); if (o && id !== c.id) list.push({ ...appearance(o.p), x: o.x, y: o.y, z: o.z, f: o.f, s: o.s, a: o.a, k: o.k || '', u: o.u || 0 }); }
-  send(c, { t: 'room', room: room.id, scene, cap: room.cap, players: list, count: room.members.size });
+  send(c, { t: 'room', room: room.id, scene, cap: room.cap, players: list, count: room.members.size, host: room.host });
   sendRoom(room, { t: 'join', p: { ...appearance(c.p), x: c.x, y: c.y, z: c.z, f: c.f, s: c.s, a: c.a } }, c.id);
 }
 function handleJoin(c, m) {
@@ -208,7 +211,7 @@ function checkReady(pt) {
   if (pt.members.some(id => r.ans[id] === false)) { pt.ready = null; for (const id of pt.members) sendId(id, { t: 'ready_end', reason: 'declined' }); return; }
   if (pt.members.every(id => r.ans[id] === true)) {
     const d = r.dest; let key = d.type === 'hub' ? 'h:' + (d.owner || pt.leader) : 'p:' + pt.id + ':' + d.scene;
-    if (d.type === 'hub') { const owner = players.get(d.owner || pt.leader); if (!owner) { pt.ready = null; return; } if (!owner.hub.scenes) { pt.ready = null; for (const id of pt.members) sendId(id, { t: 'ready_end', reason: 'that player has not built a hub yet' }); return; } }
+    if (d.type === 'hub') { const owner = players.get(d.owner || pt.leader); if (!owner) { pt.ready = null; return; } if (!owner.hub.has) { pt.ready = null; for (const id of pt.members) sendId(id, { t: 'ready_end', reason: 'that player has not built a hub yet' }); return; } }
     pt.allowed.add(key); pt.ready = null;
     for (const id of pt.members) sendId(id, { t: 'go', dest: d, inst: key });
   }
@@ -314,6 +317,7 @@ function dropConn(c) {
 }
 const COOL = { chat: 600, friend: 400, party: 300, guild: 300, hubpub: 4000, lb: 500, profile: 150, ready: 500, sync: 1000, atlas: 250, setpw: 2000 };
 const COOL_SCALE = process.env.COOL_SCALE != null ? +process.env.COOL_SCALE : 1; // tests set 0
+function bucket(c, k, rate, burst) { const b = (c.bk || (c.bk = {}))[k] || (c.bk[k] = { n: burst, t: now() }); const t = now(); b.n = Math.min(burst, b.n + (t - b.t) / 1000 * rate); b.t = t; if (b.n < 1) return false; b.n--; return true; }
 function limited(c, k) { const t = now(); c.cd = c.cd || {}; if (c.cd[k] && t - c.cd[k] < (COOL[k] || 0) * COOL_SCALE) return true; c.cd[k] = t; return false; }
 function applySave(c) { clearTimeout(c.saveT); c.saveT = null; const b = c.savePend; c.savePend = null; if (!b || !c.p) return; const t = now(); c.p.save = { t }; putBlob('save', c.p.id, { t, blob: b }); c.saveAt = t; send(c, { t: 'saved', at: t }); }
 function applyHub(c) {
@@ -373,7 +377,16 @@ function onMessage(c, raw) {
   if (m.t === 'hello') return onHello(c, m);
   const p = c.p; if (!p) return;
   switch (m.t) {
-    case 'ping': return send(c, { t: 'pong', ts: m.ts });
+    case 'ping': return send(c, { t: 'pong', ts: m.ts, now: now() });
+    case 'co': { // shared-enemy traffic (host ⇄ guests): relayed inside the room, optionally to one member, stamped with the sender
+      const r = c.room; if (!r || r.members.size < 2 || !m.d || typeof m.d !== 'object' || typeof m.d.k !== 'string') return;
+      if (!bucket(c, 'co', 120, 240)) return; const raw = JSON.stringify(m.d); if (raw.length > 60000) return;
+      const out = JSON.stringify({ t: 'co', d: m.d, from: c.id });
+      if (typeof m.to === 'string') { if (!r.members.has(m.to) || m.to === c.id) return; const o = online.get(m.to); if (o && o.ws.readyState === 1) try { o.ws.send(out); } catch (e) { } return; }
+      for (const id of r.members) { if (id === c.id) continue; const o = online.get(id); if (o && o.ws.readyState === 1) try { o.ws.send(out); } catch (e) { } } return; }
+    case 'fx': { // other players' attack / ability effects + prop smashes (client FXN): relayed to the room
+      const r = c.room; if (!r || r.members.size < 2 || !Array.isArray(m.b) || !m.b.length) return; if (!bucket(c, 'fx', 40, 80)) return;
+      const o2 = { t: 'fx', b: m.b, p: Array.isArray(m.p) ? m.p.slice(0, 3) : null, from: c.id }; if (JSON.stringify(o2).length > 40000) return; sendRoom(r, o2, c.id); return; }
     case 'join': return handleJoin(c, m);
     case 'pos': c.x = q2(clamp(num(m.x), -400, 400)); c.y = q2(clamp(num(m.y), -50, 200)); c.z = q2(clamp(num(m.z), -400, 400)); c.f = q2(num(m.f)); c.s = q2(clamp(num(m.s), 0, 30)); c.a = clamp(m.a | 0, 0, 31); c.k = typeof m.k === 'string' ? m.k.replace(/[^a-z0-9_]/gi, '').slice(0, 14) : ''; c.u = q2(clamp(num(m.u), 0, 1)); c.moved = true; return;
     case 'appear': { if (HEROES.includes(m.hero)) p.hero = m.hero; if (m.pal && typeof m.pal === 'object') p.pal = cleanPal(m.pal); setPres(p, m.pr); markDirty(); return broadcastAppear(c); }
