@@ -8608,6 +8608,7 @@ const v3=(x,y,z)=>new THREE.Vector3(x||0,y||0,z||0);
 const HL=(m,c,s,x,y,z,op)=>{const h=halo(c,s,x,y,z,op);m.halos.push(h);return h};
 const KB=()=>{const K=KITS[Hero.key];return(K&&K.base)||Hero.key};
 const iam=k=>KB()===k;
+const FLYK=['lucia','luxio','prime'];const flier=()=>FLYK.includes(KB());
 const AC=()=>typeof AKC!=='undefined'&&AKC;
 const gY=(x,z)=>RT.terr.H(x,z);
 const std=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.5,metalness:.2,flatShading:true},o||{}));
@@ -8813,6 +8814,7 @@ function mkLuxio(m){const R=H.humanoid(m,{tw:.48,th:.52,hs:.34,hw:.18,sw:.31,am:
 Object.assign(H.CHBUILD,{lucia:mkLucia,luxio:mkLuxio});
 const STL={lucia:{Rx:-.55,re:-.95,Rz:.12,wx:.4,Lx:-.3,le:-.7,Lz:.35,rk:.08,lk:.08,cy:-.1},luxio:{Rx:-.45,re:-.8,Rz:.18,wx:.55,Lx:-.4,le:-1.0,Lz:.3,rk:.14,lk:.14,cy:-.18,cx:.06,rl:-.1,ll:.08}};
 const STFLY={Rx:-.4,re:-.5,Rz:.45,wx:.3,Lx:-.3,le:-.4,Lz:.55,rk:.6,lk:.9,rl:.25,ll:-.1,bx:.15,h:.02};
+STL.prime=Object.assign({},STL.lucia,{Rx:-.5,re:-.9,Rz:.14,wx:.45});
 for(const k of PREM)H.STANCE[k]=Object.assign({},STL[k]);
 Object.assign(H.LOCO,{lucia:{leg:.9,arm:.35,lean:.12,bob:.04},luxio:{leg:.92,arm:.38,lean:.15,bob:.05}});
 const K_=(...a)=>({k:a});
@@ -8831,9 +8833,9 @@ function takeOff(col,dm){if(AC()){/* hired allies hop and blast instead of flyin
  if(flying()){land();return}P.flyU=TIME+FLY_T;P.vy=8;P.grounded=false;burst(P.x,P.y+.5,P.z,col,3);slamFx(P.x,P.z,col,3.6);aoe(P.x,P.z,3.6,dm*P.mm,{mag:1,kb:8,stun:.5,col});setAir(true);try{VX.snd('dodge')}catch(e){}}
 function land(soft){if(!(P.flyU>0))return;P.flyU=0;setAir(false);if(!soft)P.vy=-6}
 function setAir(on){if(AC())return;const K=KITS[Hero.key];if(!K||!K._ground)return;K.combo=on?K._air:K._ground;H.STANCE[Hero.key]=Object.assign({},on?STFLY:STL[KB()])}
-function flyFrame(dt){if(!(P.flyU>0))return;if(P.dead||!playOn||!(iam('lucia')||iam('luxio'))){land(true);return}
+function flyFrame(dt){if(!(P.flyU>0))return;if(P.dead||!playOn||!flier()){land(true);return}
  if(TIME>=P.flyU){land();return}let g;try{g=ground(P.x,P.z,P.y+.6)}catch(e){g=gY(P.x,P.z)}const ty=g+FLY_H;P.y+=(ty-P.y)*Math.min(1,dt*5);P.vy=0;P.grounded=false;
- if(Math.random()<dt*20){const c=iam('lucia')?(Math.random()<.5?0xfff0c0:0xffc35a):(Math.random()<.5?0xff3a1a:0xff8a2a);VX.puff('spark',v3(P.x+(Math.random()-.5)*.8,P.y+.6,P.z+(Math.random()-.5)*.8),v3(0,-1.6,0),.6,.3,.1,c,.8)}}
+ if(Math.random()<dt*20){const c=iam('lucia')?(Math.random()<.5?0xfff0c0:0xffc35a):iam('prime')?(Math.random()<.5?0xffc35a:0xff3a1a):(Math.random()<.5?0xff3a1a:0xff8a2a);VX.puff('spark',v3(P.x+(Math.random()-.5)*.8,P.y+.6,P.z+(Math.random()-.5)*.8),v3(0,-1.6,0),.6,.3,.1,c,.8)}}
 function burst(x,y,z,col,s){VX.puff('flare',v3(x,y,z),v3(),.3,s*.4,s,col,.9);sparks.emit(x,y,z,col,Math.round(8+s*3),s*1.6,.25,.4,-3)}
 function ring(x,z,col,r,T){VX.circle(x,z,r,T||.6,col,'guard',gY(x,z));VX.wave(x,z,col,r*.2,gY(x,z))}
 /* dive: from the air a falling strike at the aimed spot; on the ground a leap */
@@ -8895,7 +8897,7 @@ try{AKF.push('flyU')}catch(e){}
 {const _k=killEnemy;killEnemy=function(e){const burning=e&&e.brn&&e.brn.T>0;const r=_k.apply(this,arguments);try{if(burning&&iam('luxio')&&playOn&&!P.dead)healP(P.max*.04)}catch(x){}return r}}
 {const _u=updKit2;updKit2=function(dt){_u(dt);try{frame(dt)}catch(e){console.warn('[corinth]',e)}}}
 {const _k=killKit2;killKit2=function(){_k();try{if(P.flyU>0)land(true);BRANDS.length=0;SANCT.length=0}catch(e){}}}
-{const _a=applyKit;applyKit=function(){const r=_a.apply(this,arguments);try{if(!AC()){P.flyU=0;for(const k of PREM){if(KITS[k]._ground)KITS[k].combo=KITS[k]._ground;H.STANCE[k]=Object.assign({},STL[k])}}}catch(e){}return r}}
+{const _a=applyKit;applyKit=function(){const r=_a.apply(this,arguments);try{if(!AC()){P.flyU=0;for(const k of FLYK){if(!KITS[k])continue;if(KITS[k]._ground)KITS[k].combo=KITS[k]._ground;if(STL[k])H.STANCE[k]=Object.assign({},STL[k])}}}catch(e){}return r}}
 /* Book II chapters: summoned minions belong to the new realms */
 const BOOK2_MIN={ch8:['seraphling','halowarden'],ch9:['imp','brimbrute'],ch10:['hatchling','paragon'],ch11:['hatchling','halowarden'],ch12:['imp','paragon'],ch13:['hatchling','paragon'],ch14:['hatchling','paragon']};
 {const _s=spawnEnemy;spawnEnemy=function(kind,x,z,tag,key,opt){try{const m=S&&BOOK2_MIN[S.id];if(m&&(tag==='minion'||tag==='summon')){if(kind==='mutant'||kind==='razor')kind=m[0];else if(kind==='bulwark')kind=m[1]}}catch(e){}return _s.call(this,kind,x,z,tag,key,opt)}}
@@ -8907,10 +8909,10 @@ function frame(dt){
  if(HR&&HR.vars)setVar(HR,curV(Hero.key));
  try{for(const a of ALY){if(a.R&&a.R.wings)a.R.wings.k+=(((a.grounded===false)?1:0)-a.R.wings.k)*Math.min(1,dt*6)}}catch(e){}
  try{if(typeof NET!=='undefined'&&NET.remote)for(const r of NET.remote.values()){const R=r.rig;if(!R)continue;if(R.vars)setVar(R,(r.a&&r.a.pal&&r.a.pal.v)|0);if(R.wings)R.wings.k+=((((r.fl|0)&8)?1:0)-R.wings.k)*Math.min(1,dt*6)}}catch(e){}
- if(live&&(iam('lucia')||iam('luxio'))){hudT-=dt;if(hudT<=0){hudT=.1;hud()}}else if(hudOn)hud()}
+ if(live&&flier()){hudT-=dt;if(hudT<=0){hudT=.1;hud()}}else if(hudOn)hud()}
 let hudT=0,hudEl=null,hudOn=false;
-function hud(){if(!hudEl){hudEl=document.createElement('div');hudEl.id='c7hud';document.body.appendChild(hudEl)}const on=playOn&&!P.dead&&(iam('lucia')||iam('luxio'))&&flying();
- if(on){const l=Math.max(0,P.flyU-TIME),c=iam('lucia')?'#ffd98a':'#ff6a2a';hudEl.innerHTML=`<div class="c7t" style="color:${c}">${iam('lucia')?'Wings of Dawn':'Infernal Ascent'} · ${l.toFixed(1)}s</div><div class="c7b"><i style="width:${l/FLY_T*100}%;background:${c}"></i></div>`}
+function hud(){if(!hudEl){hudEl=document.createElement('div');hudEl.id='c7hud';document.body.appendChild(hudEl)}const on=playOn&&!P.dead&&flier()&&flying();
+ if(on){const l=Math.max(0,P.flyU-TIME),c=iam('lucia')?'#ffd98a':iam('prime')?'#ffb070':'#ff6a2a';hudEl.innerHTML=`<div class="c7t" style="color:${c}">${iam('lucia')?'Wings of Dawn':iam('prime')?'Ascendant Wings':'Infernal Ascent'} · ${l.toFixed(1)}s</div><div class="c7b"><i style="width:${l/FLY_T*100}%;background:${c}"></i></div>`}
  hudEl.classList.toggle('on',on);hudOn=on}
 
 /* =====================================================================  REGISTRATION  */
@@ -9154,7 +9156,7 @@ html.mob #c7pro .pb{min-height:calc(var(--u)*40)}
 
 /* ----- Lucia & Luxio: press jump again in mid-air to flutter (a short wing-hover) ----- */
 const JH={t:0,used:0,air:0};
-function hoverFrame(dt){const ok=playOn&&!P.dead&&(iam('lucia')||iam('luxio'))&&!AC();
+function hoverFrame(dt){const ok=playOn&&!P.dead&&flier()&&!AC();
  if(!ok||flying()){JH.t=0;return}
  if(P.grounded){JH.t=0;JH.used=0;JH.air=0;return}
  JH.air+=dt;
@@ -9215,7 +9217,7 @@ function flutter(e,dt){const W=wingOf(e);if(!W||!FLU.on)return false;let F=e.flu
  F.o=o;e.g.position.set(e.x,e.y+o,e.z);e.g.rotation.y=e.f;return true}
 {const _ai=aiEnemy;aiEnemy=function(e,dt){let took=false;try{took=flutter(e,dt)}catch(x){took=false}if(took){e.flash=Math.max(0,e.flash-dt);return}return _ai.apply(this,arguments)}}
 
-return{featherWing,batWing,wingPair,wingPose,PREM,ITEMS,SKINS,ENT:()=>ENT,mergeEnt,openPromo,closePromo,redeem,buyItem,setDesign,owns,ownsSkin,flying,land,setVar,FLU,JH,chime,bell,bellStat:()=>({n:BELLN,e:BELLE}),B2,props:Object.keys(P_),enemies:Object.keys(NE2),bosses:Object.keys(BOSSD)}})();
+return{takeOff,setAir,FLYK,featherWing,batWing,wingPair,wingPose,PREM,ITEMS,SKINS,ENT:()=>ENT,mergeEnt,openPromo,closePromo,redeem,buyItem,setDesign,owns,ownsSkin,flying,land,setVar,FLU,JH,chime,bell,bellStat:()=>({n:BELLN,e:BELLE}),B2,props:Object.keys(P_),enemies:Object.keys(NE2),bosses:Object.keys(BOSSD)}})();
 </script>
 <script id="nca-champs8">
 /* ============ TWO NEW CHAMPIONS · Convex Dialatus of the Voidsworn · The Prime Corinth ============
@@ -9280,7 +9282,11 @@ function concord(m,red){const g=new THREE.Group();g.position.y=-.05;
 function mkPrime(m){const R=H.humanoid(m,{tw:.56,th:.56,hs:.36,hw:.2,sw:.35,ul:.32,fl:.3,am:m.armor,fm:m.armor,gm:m.trim,brc:m.trim,lm:m.cloth,sm:m.armor,bm:m.trim,btr:m.glow,tm:m.armor,belt:m.trim}),{chest,head,body}=R,G=new THREE.Group();
  const red=emi(0xff3a1a,1.1),ob=new THREE.MeshStandardMaterial({color:0x1e1418,roughness:.3,metalness:.45,flatShading:true});m.halos=m.halos||[];
  /* robe split down the middle: holy white-gold on the left, obsidian-red on the right */
- body.add(B(Cy(.24,.46,.74,10),m.cloth,0,-.32,0),B(Cy(.47,.47,.05,10),m.trim,0,-.68,0),B(Bx(.2,.68,.04),m.armor,.12,-.32,.27,.12,0,0),B(Bx(.2,.68,.04),ob,-.12,-.32,.27,.12,0,0),B(Bx(.03,.66,.05),red,-.02,-.32,.3,.12,0,0),B(Bx(.03,.66,.05),m.trim,.02,-.32,.3,.12,0,0));
+ /* a long open-front robe that reads as a cape: white-gold on the left, obsidian on the right, open at the front so the legs move freely */
+ {const G0=.95,TL=PI-G0,H=.84,Y=-.33,wD=m.armor.clone(),oD=ob.clone();wD.side=THREE.DoubleSide;oD.side=THREE.DoubleSide;
+  const part=(rt,rb,h,s,l,mat,y)=>{const me=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,8,1,true,s,l),mat);me.position.y=y;me.castShadow=true;return me};
+  body.add(part(.25,.5,H,G0,TL,wD,Y),part(.25,.5,H,PI,TL,oD,Y),part(.505,.505,.06,G0,TL,m.trim,Y-H/2+.03),part(.505,.505,.06,PI,TL,red,Y-H/2+.03),
+   part(.255,.505,H,G0-.07,.07,m.trim,Y),part(.255,.505,H,2*PI-G0,.07,red,Y),part(.255,.27,.08,G0,TL,m.trim,Y+H/2-.04),part(.255,.27,.08,PI,TL,red,Y+H/2-.04))}
  chest.add(B(Bx(.28,.38,.46),m.armor,.14,.33,0),B(Bx(.28,.38,.46),ob,-.14,.33,0),B(Bx(.64,.06,.5),m.trim,0,.53,0),B(Cy(.1,.1,.04,12),m.trim,0,.38,.24,PI/2,0,0),B(Oc(.07),m.glow,0,.38,.27));
  for(let i=0;i<5;i++)chest.add(B(Bx(.016,.08,.02),i%2?red:m.trim,Math.cos(i*1.26)*.15,.38+Math.sin(i*1.26)*.15,.25,0,0,i*1.26));
  /* pauldrons: feathered gold (left) and spiked obsidian (right) */
@@ -9310,6 +9316,14 @@ H.CLX.prime=Object.assign({},H.CLX.lucia||{});
 const TM=(t,fn)=>TMR.push({t,fn:()=>{if(playOn)try{fn()}catch(e){console.warn('[c8]',e)}}});
 function zap(hi){try{sfx(hi?1500:1100,.11,'sawtooth',.018,-800);sfx(hi?420:300,.16,'square',.012,900)}catch(e){}try{VX.snd('spellRelease')}catch(e){}}
 function boomS(){try{VX.snd('bigExp')}catch(e){}}
+/* a falling star / meteor: an orb that streaks down from the sky on a slant, trailing light, and lands at (x,y,z) after T seconds */
+const STARS=[];
+function fallStar(x,y,z,col,delay,T,side){try{const g=new THREE.Group(),o=VX.orb(col,true);o.scale.setScalar(2.4);g.add(o);const core=new THREE.Mesh(new THREE.IcosahedronGeometry(.7,0),new THREE.MeshBasicMaterial({color:col===GD?0xfff4c0:0xffb070}));g.add(core);const sh=new THREE.Mesh(new THREE.IcosahedronGeometry(1.05,0),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.45,depthWrite:false}));g.add(sh);g.add(halo(col,7,0,0,0,.6));try{const L=new THREE.PointLight(col,3,16);g.add(L)}catch(e){}
+ const sx=x+side*9,sz=z-6,sy=y+22;g.position.set(sx,sy,sz);g.visible=delay<=0;RT.root.add(g);STARS.push({g,o,core,x,y,z,sx,sy,sz,t:-(delay||0),T,col})}catch(e){}}
+function starsFrame(dt){for(let i=STARS.length-1;i>=0;i--){const s=STARS[i];s.t+=dt;if(s.t<0)continue;s.g.visible=true;const k=Math.min(1,s.t/s.T),e=k*k;
+  s.g.position.set(s.sx+(s.x-s.sx)*e,s.sy+(s.y+.6-s.sy)*e,s.sz+(s.z-s.sz)*e);s.core.rotation.x+=dt*8;s.core.rotation.y+=dt*6;s.g.scale.setScalar(1+k*.4);
+  try{const q=s.g.position;for(let j=0;j<2;j++)VX.puff('flare',v3(q.x+(Math.random()-.5)*.6,q.y+(Math.random()-.5)*.6,q.z+(Math.random()-.5)*.6),v3((s.sx-s.x)*.08,2.5,(s.sz-s.z)*.08),.5,1.6,.4,s.col,.9);sparks.emit(q.x,q.y,q.z,s.col,5,3,.25,.45,1);if(Math.random()<.5)sparks.emit(q.x,q.y,q.z,0xffffff,2,2,.2,.3,1)}catch(x){}
+  if(k>=1||!playOn){try{RT.root.remove(s.g)}catch(x){}STARS.splice(i,1)}}}
 function portalFx(x,z,col,s){const y=gY(x,z);VX.circle(x,z,1.4*(s||1),.5,col,'guard',y);VX.puff('flare',v3(x,y+1,z),v3(),.25,.8*(s||1),2.4*(s||1),col,.9);sparks.ring(x,y+1,z,col,20,4,.22,.4);sparks.emit(x,y+1,z,col,14,4,.25,.45,-2)}
 /* every teleport charges Voidstep: the next basic attack deals +50% */
 function tp(x,z){const ox=P.x,oz=P.z;portalFx(ox,oz,MG,1);safeTp(x,z);portalFx(P.x,P.z,CY_,1);P.inv=Math.max(P.inv,.3);P.cvxT=TIME+2.5;zap(true);
@@ -9356,13 +9370,16 @@ KITS.convex={name:'Convex Dialatus',role:'Voidsworn Cyber Ninja',desc:'Convex Di
 const prCombo=[AX('slashR',.48,.5,()=>{melee(13,{type:'h',r:3,arc:130,kb:3,lunge:2,col:GD});try{VX.snd('bladeHeavy')}catch(e){}}),
  AX('slashL',.48,.5,()=>{melee(14,{type:'h',flip:1,r:3,arc:130,kb:3,lunge:2,col:RD,fire:1});try{VX.snd('bladeHeavy')}catch(e){}}),
  AX('chop',.66,.55,()=>{melee(18,{type:'v',r:3.2,arc:110,kb:6,big:1,stun:.4,lunge:2.5,col:CO});const x=P.x+Math.sin(P.face)*2.4,z=P.z+Math.cos(P.face)*2.4;pillarFx(x,z,GD,1.8);pillarFx(x,z,RD,1.2);aoe(x,z,3.2,16*P.mm,{mag:1,kb:6,col:CO,silent:1});boomS()},{cancel:.72})];
-KITS.prime={name:'The Prime Corinth',role:'Prime of the Corinthians',desc:'The prime form of the new beings: half seraph and half archfiend, wielding the twin-edged Concord blade. Lucia’s light and Luxio’s fire in one kit, built for huge burst and area damage: Twin Star Fall, Schism Chain, Concord Lance, Prime Nova, Aegis of Both and Genesis Cataclysm.',
- st:ST(190,24,26,36,1.0,1.0),mana:140,mrate:11,imp:'impactMagic',block:{parry:.25,cd:.7},combo:prCombo,
+const prAir=[AX('skycast',.4,.45,()=>{const f=aimYaw();proj({sp:30,life:1,dmg:10*P.mm,col:GD,size:.22,kb:2,aim:1,mag:1,dir:f-.06});proj({sp:30,life:1,dmg:10*P.mm,col:RD,size:.22,kb:2,aim:1,mag:1,dir:f+.06,fire:1});try{VX.snd('spellRelease')}catch(e){}}),
+ AX('skycast',.4,.45,()=>{const f=aimYaw();for(const[o,c]of[[-.12,RD],[0,CO],[.12,GD]])proj({sp:30,life:1,dmg:8*P.mm,col:c,size:.2,kb:2,aim:1,mag:1,dir:f+o});try{VX.snd('spellRelease')}catch(e){}}),
+ AX('skycast',.55,.5,()=>{const f=aimYaw();proj({sp:26,life:1.1,dmg:18*P.mm,col:GD,size:.34,kb:4,aim:1,mag:1,big:1,dir:f-.05,expl:2.2,explDmg:9*P.mm});proj({sp:26,life:1.1,dmg:18*P.mm,col:RD,size:.34,kb:4,aim:1,mag:1,big:1,dir:f+.05,expl:2.2,explDmg:9*P.mm,onHit:e=>{try{HZ.burnE(e,4*P.mm,2)}catch(x){}}});boomS()},{cancel:.7})];
+KITS.prime={name:'The Prime Corinth',role:'Prime of the Corinthians',desc:'The prime form of the new beings: half seraph and half archfiend, wielding the twin-edged Concord blade. Lucia’s light and Luxio’s fire in one kit, built for huge burst and area damage. Takes wing like the other two (Ascendant Wings, and a flutter on the second jump): Twin Star Fall, Concord Lance, Prime Nova, Aegis of Both and Genesis Cataclysm.',
+ st:ST(190,24,26,36,1.0,1.0),mana:140,mrate:11,imp:'impactMagic',block:{parry:.25,cd:.7},combo:prCombo,_ground:prCombo,_air:prAir,
  ab:[
-  AB('stars','Twin Star Fall',10,'☄','#ffc35a','Call a holy star and an infernal meteor onto the target (16m): two blasts 0.4s apart, 36 damage each in 4.5m. The infernal one burns.','castUp',.9,[[.45,()=>{const t=aimGround(16,10),x=t.x,z=t.z,y=gY(x,z),mm=P.mm;telegraph(x,z,4.5,.8,null,GD);VX.circle(x,z,4.5,.8,RD,'guard',y);
+  AB('stars','Twin Star Fall',10,'☄','#ffc35a','Call a holy star and an infernal meteor onto the target (16m): two blasts 0.4s apart, 36 damage each in 4.5m. The infernal one burns.','castUp',.9,[[.45,()=>{const t=aimGround(16,10),x=t.x,z=t.z,y=gY(x,z),mm=P.mm;telegraph(x,z,4.5,.8,null,GD);VX.circle(x,z,4.5,.8,RD,'guard',y);fallStar(x,y,z,GD,0,.8,-1);fallStar(x,y,z,RD,.25,.95,1);
     TM(.8,()=>{const sv=P.mm;P.mm=mm;VX.explode(v3(x,y+.6,z),3,GD,true,true);pillarFx(x,z,GD,4);aoe(x,z,4.5,36*P.mm,{mag:1,kb:8,stun:.6,big:1,col:GD});P.mm=sv;shake(.45);boomS()});
     TM(1.2,()=>{const sv=P.mm;P.mm=mm;VX.explode(v3(x,y+.6,z),3,RD,true,true);slamFx(x,z,RD,4.5);for(const e of ENEM)if(liveE(e)&&inR(e,x,z,4.5))HZ.burnE(e,5*P.mm,3);aoe(x,z,4.5,36*P.mm,{mag:1,kb:10,launch:5,big:1,col:RD,fire:1});P.mm=sv;shake(.55);HS=Math.max(HS,.07);boomS()})}]],{mp:35}),
-  AB('chain','Schism Chain',7,'ϟ','#ff3a1a','Gold and crimson lightning leaps between up to six foes (22 damage each). You heal 6% of your health.','cast',.7,[[.4,()=>{chainLightning(22*P.mm,6);healP(P.max*.06);try{sparks.emit(P.x,P.y+1.4,P.z,RD,14,5,.25,.4,-2);sparks.emit(P.x,P.y+1.4,P.z,GD,14,5,.25,.4,-2)}catch(e){}}]],{mp:28}),
+  AB('wings','Ascendant Wings',12,'𓆩','#ffb070','Take flight on both pairs of wings for 4.5s: you hover out of reach of melee foes and your attacks become volleys of light and fire (the third is a twin blast). The take-off gust knocks foes back. Press again to land.','ascend',.4,[[.2,()=>CORI.takeOff(0xffb070,10)]],{armor:1}),
   AB('lance','Concord Lance',9,'⚔','#ffb070','Twin beams of light and fire pierce everything in an 18m line: 40 damage, and foes burn.','judgement',.7,[[.5,()=>{lineHit(18,2,40*P.mm,{mag:1,kb:8,stun:.4,big:1,col:CO,fire:1});for(const e of ENEM)if(liveE(e)){const dx=e.x-P.x,dz=e.z-P.z,al=dx*Math.sin(P.face)+dz*Math.cos(P.face),pe=Math.abs(dx*Math.cos(P.face)-dz*Math.sin(P.face));if(al>0&&al<18&&pe<1.6)HZ.burnE(e,5*P.mm,3)}
     for(let i=1;i<=9;i++){const x=P.x+Math.sin(P.face)*i*2,z=P.z+Math.cos(P.face)*i*2;TM(i*.03,()=>pillarFx(x,z,i%2?GD:RD,1.4))}slashFx('v',CO,7);shake(.4);boomS()}]],{mp:30}),
   AB('nova','Prime Nova',16,'✺','#ffc35a','A double nova of light and fire bursts from you: 44 damage in 7m, launching foes; you heal 10%.','cataclysm',.9,[[.65,()=>{const x=P.x,z=P.z;slamFx(x,z,GD,7);slamFx(x,z,RD,5);VX.explode(v3(x,P.y+.6,z),3.4,CO,true,true);aoe(x,z,7,44*P.mm,{mag:1,kb:12,stun:.8,big:1,launch:6,col:CO});healP(P.max*.1);shake(.7);HS=Math.max(HS,.1);boomS()}]],{mp:40,armor:1}),
@@ -9373,9 +9390,9 @@ for(const k of KEYS){const K=KITS[k];K.key=k;try{NEWK.push(k)}catch(e){}}
 try{Object.assign(TRK,{convex:['tip','tipL'],prime:['tip']})}catch(e){}
 
 /* per frame: portals, Voidstep glow, a safety net for Dimensional Rend's vanish */
-{const _u=updKit2;updKit2=function(dt){_u(dt);try{portalFrame(dt);if(P.cvxHide&&TIME>P.cvxHide+.3){P.cvxHide=0;if(heroG)heroG.visible=true}
+{const _u=updKit2;updKit2=function(dt){_u(dt);try{starsFrame(dt)}catch(e){}try{portalFrame(dt);if(P.cvxHide&&TIME>P.cvxHide+.3){P.cvxHide=0;if(heroG)heroG.visible=true}
  if(iam('convex')&&TIME<(P.cvxT||0)&&Math.random()<dt*14&&HR&&HR.tip){const p=new THREE.Vector3();HR.tip.getWorldPosition(p);VX.puff('spark',p,v3(0,1,0),.3,.25,.08,Math.random()<.5?CY_:MG,.9)}
- if(iam('prime')&&HR&&HR.wings){const f=(P.act&&P.act.clip==='ascend')?1:.25;HR.wings.k+=(f-HR.wings.k)*Math.min(1,dt*6);if(HR.wings2)HR.wings2.k=HR.wings.k}}catch(e){}}}
+ if(iam('prime')&&HR&&HR.wings){const f=((P.act&&P.act.clip==='ascend')||(CORI.flying&&CORI.flying())||(CORI.JH&&CORI.JH.t>0))?1:.25;HR.wings.k+=(f-HR.wings.k)*Math.min(1,dt*6);if(HR.wings2)HR.wings2.k=HR.wings.k}}catch(e){}}}
 try{AKF.push('cvxT','cvxHide')}catch(e){}
 
 /* =====================================================================  REGISTRATION IN THE OTHER TABLES  */
@@ -9384,7 +9401,7 @@ try{HERO_BASES.push(...KEYS)}catch(e){}
 try{Object.assign(UNL.PRICE,{convex:900,prime:1200})}catch(e){}
 try{Object.assign(AKS,{convex:{rng:2.6},prime:{rng:3}})}catch(e){}
 try{Object.assign(AKAI,{convex:[['ult',c=>c.n6>=3||c.boss],['vbar',c=>c.n9>=2],['rift',c=>c.nT>=3],['kunai',c=>c.g>3&&c.g<10],['phase',c=>c.g>4&&c.g<10]],
- prime:[['aegis',c=>c.pm<.5],['nova',c=>c.n6>=3],['gen',c=>c.n9>=4||c.boss],['stars',c=>c.nT>=2||c.boss],['chain',c=>c.n9>=2],['lance',c=>c.g<16]]})}catch(e){}
+ prime:[['aegis',c=>c.pm<.5],['nova',c=>c.n6>=3],['gen',c=>c.n9>=4||c.boss],['stars',c=>c.nT>=2||c.boss],['wings',c=>c.n6>=3],['lance',c=>c.g<16]]})}catch(e){}
 try{Object.assign(ALR,{convex:{t:'m',sp:'flurry',col:CY_,hpm:1.0,dmm:1.15,spd:5.4},prime:{t:'m',sp:'slam',col:CO,hpm:1.2,dmm:1.15}})}catch(e){}
 try{Object.assign(NPCD,{
  convex:{g:["A ring of neon light turns behind Convex's back, and for a moment the air folds. “I was across the plaza a heartbeat ago. Distance is a suggestion.”","“The Voidsworn keep the spaces between places. The Rift is tearing holes where there should be none. I close them.”"],r:["“You're where I expected. That's rare.”"],w:["“I'll be behind them before they turn.”"],t:[["How do the portals work?",["“Two doors, one hallway, no walls. Step in one, step out the other. Mind the landing.”"]],["Voidstep?",["“Every jump through the void leaves energy in the blade. The next cut lands harder. Use it.”"]]],p:["“The Voidsworn work for a price. Stars will do.”"],h:["“Contract sealed. I'm already there.”"],f:["“Our pact holds across every distance.”"],n:["“Come back when you can pay the way through.”"]},
@@ -9398,10 +9415,10 @@ try{const A=TRAIN.A;const yard=(H2,id,name,x,z,n)=>{H2.dummies(id,name,x,z,n,{co
    H2.trial('barr','Barrage Run','Teleport through the pack with Void Barrage and Phase Shift.',40,-14,[{k:'mutant',n:10,ring:8},{k:'razor',n:3,ring:11}],[18,28,44],{r:15});
    H2.trial('rend','Rend the Line','Drag them into a Rift, then Rend the crowd.',-40,24,[{k:'mutant',n:12,ring:7},{k:'brute',n:2,ring:5}],[22,34,52],{r:14})}};
  A.prime={title:'The Accord Spire',theme:'solar',mood:'dusk',ground:'stone',dps:[260,460,720],fx:{fireflies:1,dust:1,mist:1,leaves:0,snow:0,ash:1},
-  blurb:'Burst and area damage from light and fire: drop Twin Star Fall on a pack, chain Schism lightning, then end it with Prime Nova and Genesis Cataclysm.',
+  blurb:'Burst and area damage from light and fire: take wing and rain twin volleys, drop Twin Star Fall on a pack, then end it with Prime Nova and Genesis Cataclysm.',
   learn:['Twin Star Fall lands twice: keep foes in the circle for both blasts.','Aegis of Both cuts damage by 70% and pulses fire around you: wade in with it.','Genesis Cataclysm hits three times in 9m; the last wave launches and burns.'],
   build(H2){yard(H2,'accord','Accord Range',-40,-14,5);
-   H2.trial('stars','Starfall','Clear the packs with Twin Star Fall and Schism Chain.',40,-14,[{k:'mutant',n:12,ring:7},{k:'razor',n:3,ring:10}],[20,30,46],{r:15});
+   H2.trial('stars','Starfall','Clear the packs with Twin Star Fall and your airborne volleys.',40,-14,[{k:'mutant',n:12,ring:7},{k:'razor',n:3,ring:10}],[20,30,46],{r:15});
    H2.trial('genesis','Genesis','A crowd closes in: Aegis, then Nova and Cataclysm.',-40,24,[{k:'mutant',n:14,ring:6},{k:'brute',n:2,ring:9}],[24,36,56],{r:14})}}}catch(e){console.warn('[c8] training',e)}
 
 return{KEYS,PORT,portalGate,tp}})();
@@ -9725,7 +9742,7 @@ function under(o,top,stop){while(o&&o!==top){if(stop.has(o))return true;o=o.pare
 function animated(o,top){while(o&&o!==top){if(o.userData&&o.userData.anim)return true;o=o.parent}return false}
 function relMat(o,top,out){out.identity();while(o&&o!==top){o.updateMatrix();out.premultiply(o.matrix);o=o.parent}return out}
 function rebuild(g){const p=g.parameters||{};let n=null;
- try{if(g.type==='CylinderGeometry')n=new THREE.CylinderGeometry(p.radiusTop,p.radiusBottom,p.height,p.radialSegments||8,3,p.openEnded);
+ try{if(g.type==='CylinderGeometry')n=new THREE.CylinderGeometry(p.radiusTop,p.radiusBottom,p.height,Math.max(p.radialSegments||8,(p.thetaLength!==undefined&&p.thetaLength<6)?6:0),3,p.openEnded,p.thetaStart||0,p.thetaLength===undefined?Math.PI*2:p.thetaLength);
   else if(g.type==='ConeGeometry')n=new THREE.ConeGeometry(p.radius,p.height,p.radialSegments||8,3,p.openEnded);
   else if(g.type==='BoxGeometry')n=new THREE.BoxGeometry(p.width,p.height,p.depth,1,3,1);}catch(e){n=null}
  if(!n)n=g.clone();return n.index?n.toNonIndexed():n}
@@ -9745,10 +9762,16 @@ function attach(G){try{const R=G&&G.userData&&G.userData.rig;if(!R||!R.body||!R.
   for(const c of [...o.children])if(c.userData&&c.userData.hull)o.remove(c);
   try{const h=new THREE.Mesh(hull(ng),HUB.OLMAT);h.userData.hull=1;h.raycast=()=>{};h.frustumCulled=false;o.add(h)}catch(e){}
   o.frustumCulled=false;const pos=ng.attributes.position,n=pos.count;
-  items.push({o,pos,v0:Float32Array.from(pos.array),D:new Float32Array(n*3),V:new Float32Array(n*3)})}
+  items.push({o,pos,v0:Float32Array.from(pos.array),D:new Float32Array(n*3),V:new Float32Array(n*3),gt:g.type,gp:Object.assign({},g.parameters||{})})}
  if(!items.length)return G;
  const kn=R.kneeL&&R.kneeR;const l1=kn?Math.abs(R.kneeL.position.y)||.34:.7,l2=kn?.32:0;
- G.userData.ncc={R,items,hipY,l1,l2,last:null,idle:0};LIST.push(G)}catch(e){console.warn('[cloth]',e)}return G}
+ /* long, closed skirts and dresses (reaching below the knee): hide the thighs and shins inside them so no leg can poke through
+    the front; the boots stay visible below the hem. Open robes, short skirts and tassets keep their legs. */
+ const kneeY=hipY-l1;const longs=items.filter(it=>{const p=it.gp||{};const closed=(it.gt==='CylinderGeometry'||it.gt==='ConeGeometry')&&(p.thetaLength===undefined||p.thetaLength>6.2);if(!closed)return false;
+  relMat(it.o,body,_m);let y0=1e9;const a=it.v0;for(let i=0;i<a.length;i+=3){_v.set(a[i],a[i+1],a[i+2]).applyMatrix4(_m);if(_v.y<y0)y0=_v.y}return y0<kneeY-.05});
+ const legHide=[];if(longs.length)for(const s of['L','R']){const lg=R['leg'+s],kn=R['knee'+s];for(const c of lg.children)if(c.isMesh&&!c.userData.hull)legHide.push(c);if(kn)for(const c of kn.children)if(c.isMesh&&!c.userData.hull&&c.position.y>-.2)legHide.push(c)}
+ G.userData.ncc={R,items,hipY,l1,l2,last:null,idle:0,longs,legHide,legsShown:true};legVis(G.userData.ncc);LIST.push(G)}catch(e){console.warn('[cloth]',e)}return G}
+function legVis(C){if(!C.legHide||!C.legHide.length)return;const show=!C.longs.some(it=>{let o=it.o;while(o&&o!==C.R.body){if(!o.visible)return false;o=o.parent}return true});if(show!==C.legsShown){C.legsShown=show;for(const m of C.legHide)m.visible=show}}
 
 /* leg point at a given drop below the hip, now and at rest (body space) */
 const LG={L:{h:new THREE.Vector3(),k:new THREE.Vector3(),f:new THREE.Vector3(),k0:new THREE.Vector3(),f0:new THREE.Vector3(),sx:1},R:{h:new THREE.Vector3(),k:new THREE.Vector3(),f:new THREE.Vector3(),k0:new THREE.Vector3(),f0:new THREE.Vector3(),sx:-1}};
@@ -9762,6 +9785,7 @@ function tick(dt0){T+=dt0;if(!ON.on)return;dt0=Math.min(dt0,1/30);if(dt0<=0)retu
  for(let gi=LIST.length-1;gi>=0;gi--){const G=LIST[gi],C=G.userData.ncc;let dt=dt0;
   let o=G,vis=true,sc=false;while(o){if(!o.visible){vis=false;break}if(o.isScene){sc=true;break}o=o.parent}
   if(!sc){C.idle+=dt;if(C.idle>30){LIST.splice(gi,1)}continue}C.idle=0;if(!vis)continue;
+  try{legVis(C)}catch(e){}
   const R=C.R,body=R.body;
   try{if(typeof P!=='undefined'&&P&&typeof P.x==='number'){G.getWorldPosition(_w);const dd=Math.hypot(_w.x-P.x,_w.z-P.z);if(dd>40)continue;if(dd>16){C.sk=(C.sk||0)+1;C.acc=(C.acc||0)+dt;if(C.sk%3)continue;dt=Math.min(C.acc,1/20);C.acc=0}}}catch(e){}
   /* body velocity in its own frame → the hem trails behind */
@@ -9777,7 +9801,7 @@ function tick(dt0){T+=dt0;if(!ON.on)return;dt0=Math.min(dt0,1/30);if(dt0<=0)retu
       let rx=_v.x-P0.x,rz=_v.z-P0.z;const rl=Math.hypot(rx,rz)||1e-4;
       if(mm>1e-4){const ah=(rx*mx+rz*mz)/(rl*mm),wa=Math.max(0,Math.min(1,.3+.7*ah));tx+=mx*ws*wa;tz+=mz*ws*wa;ty+=mm*.32*ws*wa}
       /* keep the rest clearance between hem and leg so the foot presses the cloth instead of passing through */
-      const cx=_v.x+tx-P_.x,cz=_v.z+tz-P_.z,cd=Math.hypot(cx,cz)||1e-4,need=Math.min(.5,Math.max(.14,rl))*.92;
+      const cx=_v.x+tx-P_.x,cz=_v.z+tz-P_.z,cd=Math.hypot(cx,cz)||1e-4,need=Math.min(.55,Math.max(.2,rl))*.97+(drop>C.l1?.06:0);
       if(cd<need&&(cx*mx+cz*mz)>=-1e-3){const k=(need-cd)*ws;tx+=cx/cd*k;tz+=cz/cd*k}
       /* foot lifted to the hem's height: lift the hem with it */
       if(P_.y>_v.y+ty-.05&&Math.hypot(_v.x-P_.x,_v.z-P_.z)<.3)ty+=(P_.y-(_v.y+ty)+.05)*ws}
