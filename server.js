@@ -75,12 +75,12 @@ function safeEq(a, b) { try { const x = Buffer.from(String(a)), y = Buffer.from(
 function seeded(seed) { let h = 1779033703 ^ seed.length; for (let i = 0; i < seed.length; i++) { h = Math.imul(h ^ seed.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return () => { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
 
 /* ---------------------------------------------------------------- game data */
-const HEROES = ['starr', 'aurealius', 'willow', 'akira', 'talos', 'dante', 'seraphine', 'vesper', 'brigid', 'fenn', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara', 'lucia', 'luxio'];
+const HEROES = ['starr', 'aurealius', 'willow', 'akira', 'talos', 'dante', 'seraphine', 'vesper', 'brigid', 'fenn', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara', 'lucia', 'luxio', 'convex', 'prime'];
 /* ---- premium content (Book II: The Rise of the Corinthians) ----
    ITEMS: what each real-money SKU unlocks (prices live in your Wix backend PACKS table, see README).
    COUPONS: comma list in env COUPON_CODES (default ALLOFTHEM) – unlocks every locked champion incl. the premium ones. */
 const PREMIUM = ['lucia', 'luxio'];
-const LOCKED_ALL = ['seraphine', 'fenn', 'vesper', 'brigid', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara', 'lucia', 'luxio'];
+const LOCKED_ALL = ['seraphine', 'fenn', 'vesper', 'brigid', 'leander', 'nyx', 'moros', 'alita', 'rhoka', 'isolde', 'cassian', 'maeve', 'rook', 'elara', 'lucia', 'luxio', 'convex', 'prime'];
 const ITEMS = { champ_lucia: { heroes: ['lucia'] }, champ_luxio: { heroes: ['luxio'] }, bundle_corinth: { heroes: ['lucia', 'luxio'], skins: ['lucia', 'luxio'] } };
 const COUPONS = (process.env.COUPON_CODES || 'ALLOFTHEM').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
@@ -322,7 +322,7 @@ function onHello(c, m) {
   if (HEROES.includes(m.hero)) p.hero = m.hero; if (m.pal && typeof m.pal === 'object') p.pal = cleanPal(m.pal); setPres(p, m.pr);
   c.bucket = EARN_PER_MIN; c.bt = now(); c.joined = now();
   const g = p.guild && guilds.get(p.guild); if (p.guild && !g) p.guild = null;
-  send(c, { t: 'welcome', id: p.id, name: p.name, token: a.token, stars: p.stars, ent: entOf(p), wix: !!p.wix, profile: profileOf(p, p), quests: ensureQuests(p), guild: g ? guildState(g, p.id) : null, invites: p.gInv.map(i => ({ guild: i.guild, name: i.name, from: i.fromName })), hasSave: !!(p.save && p.save.t), saveT: p.save ? p.save.t | 0 : 0, hasPw: !!p.pw, devGrant: DEV_GRANT, caps: { hub: HUB_CAP, party: PARTY_MAX, guildCost: GUILD_COST }, icons: GUILD_ICONS, lvTable: G_LV });
+  send(c, { t: 'welcome', id: p.id, name: p.name, token: a.token, stars: p.stars, ent: entOf(p), wix: !!p.wix, profile: profileOf(p, p), quests: ensureQuests(p), guild: g ? guildState(g, p.id) : null, invites: p.gInv.map(i => ({ guild: i.guild, name: i.name, from: i.fromName })), hasSave: !!(p.save && p.save.t), saveT: p.save ? (+p.save.t || 0) : 0, hasPw: !!p.pw, devGrant: DEV_GRANT, caps: { hub: HUB_CAP, party: PARTY_MAX, guildCost: GUILD_COST }, icons: GUILD_ICONS, lvTable: G_LV });
   pushFriends(p); markDirty();
 }
 const cleanPal = o => { const r = {}; for (const k of ['armor', 'trim', 'cloth', 'glow', 'hair', 'skin']) if (typeof o[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(o[k])) r[k] = o[k]; if (o.v === 1 || o.v === 2) r.v = o.v; return r; };
