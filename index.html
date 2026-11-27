@@ -10592,6 +10592,138 @@ try{const _s=storySay;storySay=function(hero,name,text){const r=_s.apply(this,ar
 
 return{O,T,pick,fadeTo,chirp,stop:()=>{O.off=true;tick()},play:()=>{O.off=false;tick()}}})();
 </script>
+<script id="nca-sky">
+/* =====================================================================
+   NCSKY · day / night cycle + clouds and weather (outdoor scenes: the central hub, player hubs, training grounds)
+   * A full day lasts 24 real minutes (one in-game hour per minute). Sunrise, a bright day, a warm sunset and a starlit
+     night with a moon; sky dome, fog, ambient, sun / moon light and shadows all follow. Each scene keeps its own palette
+     (the hub's aurora hues show through at dusk and night).
+   * Weather: clear, cloudy, rain, thunderstorm (lightning + thunder), snow and fog. It changes every few minutes with
+     slow crossfades. Low-poly clouds drift with the wind; rain streaks slant in it; snow sways.
+   * In multiplayer the clock and the weather come from the shared world clock, so everyone sees the same sky.
+   * The chip under the minimap shows the time and weather; click it to pin the time of day or the weather, or turn it off.
+   Story chapters keep their hand-made moods.
+   ===================================================================== */
+const NCSKY=(()=>{
+const DAY=24*60;                         /* seconds per in-game day */
+const WXP=210;                           /* seconds per weather period */
+const KEY='nca_sky';
+const O={on:true,time:'auto',wx:'auto',base:null,k:{},cur:'clear',from:'clear',blend:1,lastSeed:-1,flash:0,bolt:null,boltT:0,nextBolt:5,wind:new THREE.Vector2(1,.4)};
+try{Object.assign(O,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify({on:O.on,time:O.time,wx:O.wx}))}catch(e){}};
+const C=(h)=>new THREE.Color(h),L=(a,b,t)=>a.clone().lerp(b,t);
+const sm=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t)};
+const mob=()=>document.documentElement.classList.contains('mob');
+function clock(){try{if(typeof NET!=='undefined'&&NET.clock&&NET.mp&&NET.mp())return NET.clock()}catch(e){}return Date.now()/1000}
+function dayT(){if(O.time==='day')return .5;if(O.time==='night')return .02;if(O.time==='dusk')return .76;if(O.time==='dawn')return .255;return((clock()+DAY*.33)%DAY)/DAY}
+const outdoor=()=>{try{if(!S)return false;return S.id==='hub'||S.type==='hub'||!!S.visit||!!S.mine||!!S.tr}catch(e){return false}};
+const snowy=()=>{try{return['frost','aether'].includes(S.theme)&&false}catch(e){return false}};
+
+/* ---------------- weather choice (deterministic per period so every player agrees) ---------------- */
+const WX={clear:{cl:.18,dark:0,rain:0,snow:0,fog:1,wind:.5},cloudy:{cl:.75,dark:.15,rain:0,snow:0,fog:1.1,wind:.8},rain:{cl:1,dark:.4,rain:.75,snow:0,fog:1.5,wind:1.1},
+ storm:{cl:1,dark:.62,rain:1,snow:0,fog:1.7,wind:1.8,bolt:1},snow:{cl:.9,dark:.22,rain:0,snow:1,fog:1.8,wind:.6},fog:{cl:.55,dark:.18,rain:0,snow:0,fog:3.6,wind:.3}};
+const ORDER=['clear','cloudy','rain','storm','snow','fog'];
+function rnd(s){s=Math.sin(s*12.9898+78.233)*43758.5453;return s-Math.floor(s)}
+function pickWx(seed){const r=rnd(seed),W=[['clear',.34],['cloudy',.22],['rain',.15],['storm',.08],['snow',.09],['fog',.12]];let a=0;for(const[k,w]of W){a+=w;if(r<a)return k}return'clear'}
+function wxNow(){if(O.wx!=='auto')return{k:O.wx,seed:-2};const seed=Math.floor(clock()/WXP);return{k:pickWx(seed),seed}}
+const WI={clear:'☀',cloudy:'☁',rain:'🌧',storm:'⛈',snow:'❄',fog:'🌫'},WN={clear:'Clear',cloudy:'Cloudy',rain:'Rain',storm:'Thunderstorm',snow:'Snow',fog:'Fog'};
+
+/* ---------------- capture each scene's own mood, then layer the cycle over it ---------------- */
+{const _a=applyMoodScene;applyMoodScene=function(){const m=_a.apply(this,arguments);try{capture()}catch(e){}return m}}
+function capture(){const u=CTX.skyMesh.material.uniforms;O.base={top:u.uTop.value.clone(),hor:u.uHor.value.clone(),gl:u.uGl.value.clone(),sun:u.uSun.value.clone(),stars:u.uStars.value,
+ fogC:SC.fog?SC.fog.color.clone():C(0),fogD:SC.fog?SC.fog.density:.008,hemiC:hemi.color.clone(),hemiG:hemi.groundColor.clone(),hemiI:hemi.intensity,sunC:sun.color.clone(),sunI:sun.intensity,rimI:rim.intensity,
+ sunBase:CTX.sunBase.clone(),exp:CTX.exposure,olC:HUB.OL.uniforms.uFogC.value.clone(),olD:HUB.OL.uniforms.uFogD.value};O.applied=false}
+function restore(){const b=O.base;if(!b||!O.applied)return;const u=CTX.skyMesh.material.uniforms;u.uTop.value.copy(b.top);u.uHor.value.copy(b.hor);u.uGl.value.copy(b.gl);u.uSun.value.copy(b.sun);u.uStars.value=b.stars;
+ if(SC.fog){SC.fog.color.copy(b.fogC);SC.fog.density=b.fogD}SC.background=b.fogC.clone();hemi.color.copy(b.hemiC);hemi.groundColor.copy(b.hemiG);hemi.intensity=b.hemiI;sun.color.copy(b.sunC);sun.intensity=b.sunI;rim.intensity=b.rimI;
+ CTX.sunBase.copy(b.sunBase);CTX.exposure=b.exp;HUB.OL.uniforms.uFogC.value.copy(b.olC);HUB.OL.uniforms.uFogD.value=b.olD;O.applied=false}
+
+/* key colours of the day */
+const K={nightTop:C(0x050a1e),nightHor:C(0x16204a),dayTop:C(0x1f52bc),dayHor:C(0x62a6ee),setTop:C(0x2e2466),setHor:C(0xff8a5a),riseHor:C(0xffb38a),
+ sunDay:C(0xfff2dc),sunSet:C(0xff9a5a),moon:C(0x9fb4ff),hemiDay:C(0xdfeaff),hemiNight:C(0x4a5aa0),hemiSet:C(0xffb08a),grey:C(0x7e8696),storm:C(0x3a4050)};
+const W_={top:new THREE.Color(),hor:new THREE.Color(),tmp:new THREE.Color()};
+function light(dt){const b=O.base;if(!b)return;const t=dayT();const alt=Math.sin((t-.25)*Math.PI*2);const day=sm(-.12,.3,alt),tw=Math.exp(-Math.pow(alt/.2,2)),eve=t>.5?1:0;
+ const w=wxMix();const dark=w.dark;
+ /* sky */
+ const cyTop=L(K.nightTop,K.dayTop,day).lerp(K.setTop,tw*.6),cyHor=L(K.nightHor,K.dayHor,day).lerp(eve?K.setHor:K.riseHor,tw*.85);
+ const mixK=S.id==='hub'?.8:.65;const top=L(b.top,cyTop,mixK).lerp(K.storm,dark*.7),hor=L(b.hor,cyHor,mixK).lerp(K.grey,dark*.55);
+ const u=CTX.skyMesh.material.uniforms;u.uTop.value.copy(top);u.uHor.value.copy(hor);u.uStars.value=Math.max(0,(1-day*1.4))*(1-w.cl*.85)*Math.max(b.stars,.8);
+ /* sun by day, moon by night (the sky shader draws a glowing disc at uSun) */
+ const az=(t-.25)*Math.PI*2,sx=Math.cos(az),sy=Math.sin(az);const moonUp=alt<0;const dir=moonUp?new THREE.Vector3(-sx*.8,-sy*.9+.15,-.45):new THREE.Vector3(sx*.8,sy*.9+.08,-.45);dir.y=Math.max(.08,dir.y);dir.normalize();
+ u.uSun.value.copy(dir);u.uGl.value.copy(moonUp?K.moon:L(K.sunDay,K.sunSet,tw)).multiplyScalar((moonUp?.55:.95)*(1-w.cl*.75));
+ /* fog + background */
+ const fogc=L(hor,top,.5).multiplyScalar(.4+day*.12).lerp(K.grey.clone().multiplyScalar(.5),Math.min(1,(w.fog-1)*.3));
+ if(SC.fog){SC.fog.color.copy(fogc);SC.fog.density=b.fogD*(w.fog)*(1-day*.45)}SC.background=fogc;HUB.OL.uniforms.uFogC.value.copy(fogc);HUB.OL.uniforms.uFogD.value=b.olD*w.fog;
+ /* lights */
+ const dim=1-dark*.45;hemi.color.copy(L(K.hemiNight,K.hemiDay,day).lerp(K.hemiSet,tw*.5)).lerp(b.hemiC,.3);hemi.intensity=(b.hemiI*.55+(.32+day*.55))*dim+O.flash*1.4;
+ sun.color.copy(moonUp?K.moon:L(K.sunDay,K.sunSet,tw));sun.intensity=(moonUp?.32:(.25+day*1.0))*dim*(1-w.cl*.35)+O.flash*1.2;
+ rim.intensity=b.rimI*(.6+(1-day)*.6);
+ CTX.sunBase.set(dir.x*30,Math.max(10,dir.y*30),dir.z*30+2);CTX.exposure=b.exp*(.92+day*.06)*(1-dark*.1)+O.flash*.25;O.applied=true;O.day=day;O.t=t}
+
+/* ---------------- weather blend ---------------- */
+function wxMix(){const a=WX[O.from],b=WX[O.cur],k=sm(0,1,O.blend);const o={};for(const f of['cl','dark','rain','snow','fog','wind'])o[f]=a[f]+(b[f]-a[f])*k;o.bolt=(b.bolt||0)*k;return o}
+function wxStep(dt){const n=wxNow();if(n.k!==O.cur){O.from=O.blend<1?O.cur:O.cur;O.cur=n.k;O.blend=0}O.blend=Math.min(1,O.blend+dt/20)}
+
+/* ---------------- clouds ---------------- */
+let CL=null;const cloudMat=new THREE.MeshLambertMaterial({color:0xffffff,emissive:0x8890a8,flatShading:true,transparent:true,opacity:.85,depthWrite:false,fog:false});
+function mkClouds(){CL=new THREE.Group();CL.userData.noPick=1;const n=mob()?14:22,geo=new THREE.IcosahedronGeometry(1,0);
+ for(let i=0;i<n;i++){const c=new THREE.Group();const m=4+Math.floor(Math.random()*4);for(let j=0;j<m;j++){const p=new THREE.Mesh(geo,cloudMat);p.scale.set(5+Math.random()*6,2.2+Math.random()*2,4+Math.random()*5);p.position.set((j-m/2)*5.5+Math.random()*2,Math.random()*2,Math.random()*5-2.5);p.userData.noOutline=1;p.raycast=()=>{};c.add(p)}
+  const a=Math.random()*Math.PI*2,r=18+Math.random()*115;c.position.set(Math.sin(a)*r,40+Math.random()*22,Math.cos(a)*r);c.rotation.y=Math.random()*6;c.userData.k=i/n;CL.add(c)}SC.add(CL)}
+function clouds(dt,w){if(!CL)mkClouds();CL.visible=true;const f=(typeof P!=='undefined'&&P)?P:{x:0,z:0};const day=O.day||0;
+ cloudMat.color.copy(L(C(0x2a3050),C(0xffffff),day)).lerp(C(0x6a7080),w.dark).lerp(C(0xffb08a),Math.exp(-Math.pow(Math.sin(((O.t||0)-.25)*Math.PI*2)/.2,2))*.35);cloudMat.opacity=.55+w.cl*.35;cloudMat.emissive.copy(cloudMat.color).multiplyScalar(.55);
+ const sp=2+w.wind*5;for(const c of CL.children){c.position.x+=O.wind.x*sp*dt;c.position.z+=O.wind.y*sp*dt;let dx=c.position.x-f.x,dz=c.position.z-f.z;const R=150;if(dx>R)c.position.x-=2*R;if(dx<-R)c.position.x+=2*R;if(dz>R)c.position.z-=2*R;if(dz<-R)c.position.z+=2*R;
+  const vis=c.userData.k<w.cl;c.visible=vis;if(vis){const s=1+w.dark*.5;c.scale.set(s,1+w.dark*.3,s)}}}
+
+/* ---------------- rain / snow ---------------- */
+let RN=null,SN=null;const BOX={x:56,y:36,z:56};
+function mkRain(){const n=mob()?700:1600,g=new THREE.BufferGeometry(),p=new Float32Array(n*6);for(let i=0;i<n;i++){const x=(Math.random()-.5)*BOX.x,y=Math.random()*BOX.y,z=(Math.random()-.5)*BOX.z;p.set([x,y,z,x,y-.9,z],i*6)}g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ RN=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0xaecbff,transparent:true,opacity:.5,depthWrite:false,fog:true}));RN.frustumCulled=false;RN.userData.noPick=1;RN.raycast=()=>{};RN.userData.n=n;SC.add(RN)}
+function mkSnow(){const n=mob()?600:1300,g=new THREE.BufferGeometry(),p=new Float32Array(n*3),ph=new Float32Array(n);for(let i=0;i<n;i++){p.set([(Math.random()-.5)*BOX.x,Math.random()*BOX.y,(Math.random()-.5)*BOX.z],i*3);ph[i]=Math.random()*6.3}g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ SN=new THREE.Points(g,new THREE.PointsMaterial({color:0xffffff,size:.28,transparent:true,opacity:.9,depthWrite:false,sizeAttenuation:true}));SN.frustumCulled=false;SN.userData.ph=ph;SN.userData.noPick=1;SN.raycast=()=>{};SC.add(SN)}
+function precip(dt,w){const c=CAM.position;
+ if(w.rain>.02){if(!RN)mkRain();RN.visible=true;RN.material.opacity=.18+w.rain*.42;RN.material.color.copy(L(C(0x5a6a90),C(0xbcd4ff),O.day||0));const a=RN.geometry.attributes.position.array,n=RN.userData.n,vy=-(24+w.rain*14)*dt,vx=O.wind.x*w.wind*4*dt,vz=O.wind.y*w.wind*4*dt,act=Math.floor(n*(.35+w.rain*.65));RN.geometry.setDrawRange(0,act*2);
+  for(let i=0;i<act;i++){const j=i*6;let x=a[j]+vx,y=a[j+1]+vy,z=a[j+2]+vz;if(y<0){y+=BOX.y;x=(Math.random()-.5)*BOX.x;z=(Math.random()-.5)*BOX.z}if(x>BOX.x/2)x-=BOX.x;if(x<-BOX.x/2)x+=BOX.x;if(z>BOX.z/2)z-=BOX.z;if(z<-BOX.z/2)z+=BOX.z;a[j]=x;a[j+1]=y;a[j+2]=z;a[j+3]=x-O.wind.x*w.wind*.18;a[j+4]=y-1.1;a[j+5]=z-O.wind.y*w.wind*.18}
+  RN.geometry.attributes.position.needsUpdate=true;RN.position.set(c.x,c.y-BOX.y*.45,c.z)}else if(RN)RN.visible=false;
+ if(w.snow>.02){if(!SN)mkSnow();SN.visible=true;SN.material.opacity=w.snow*.9;const a=SN.geometry.attributes.position.array,ph=SN.userData.ph,n=a.length/3,T=performance.now()/1000;
+  for(let i=0;i<n;i++){const j=i*3;let y=a[j+1]-(1.6+(i%5)*.25)*dt;a[j]+=(Math.sin(T*.8+ph[i])*.6+O.wind.x*w.wind)*dt;a[j+2]+=(Math.cos(T*.7+ph[i])*.6+O.wind.y*w.wind)*dt;if(y<0){y+=BOX.y;a[j]=(Math.random()-.5)*BOX.x;a[j+2]=(Math.random()-.5)*BOX.z}a[j+1]=y;if(a[j]>BOX.x/2)a[j]-=BOX.x;if(a[j]<-BOX.x/2)a[j]+=BOX.x;if(a[j+2]>BOX.z/2)a[j+2]-=BOX.z;if(a[j+2]<-BOX.z/2)a[j+2]+=BOX.z}
+  SN.geometry.attributes.position.needsUpdate=true;SN.position.set(c.x,c.y-BOX.y*.45,c.z)}else if(SN)SN.visible=false}
+
+/* ---------------- lightning + thunder ---------------- */
+let AX_=null;const actx=()=>{if(!AX_){try{AX_=new(window.AudioContext||window.webkitAudioContext)();AX_.__o=AX_.createGain();AX_.__o.connect(typeof AUD!=='undefined'?AUD.cat(AX_,'fx'):AX_.destination)}catch(e){}}if(AX_&&AX_.state==='suspended')try{AX_.resume()}catch(e){}return AX_};
+addEventListener('pointerdown',()=>{try{AX_&&AX_.resume()}catch(e){}},{passive:true});
+function thunder(delay,near){const c=actx();if(!c)return;try{const n=c.sampleRate*2.6|0,buf=c.createBuffer(1,n,c.sampleRate),d=buf.getChannelData(0);let last=0;for(let i=0;i<n;i++){const t=i/c.sampleRate,env=Math.exp(-t*(near?1.6:1.1))*(t<.05?t/.05:1)*(1+.6*Math.sin(t*7)*Math.exp(-t));last=last*.97+(Math.random()*2-1)*.03;d[i]=last*env*9}
+ const s=c.createBufferSource();s.buffer=buf;const lp=c.createBiquadFilter();lp.type='lowpass';lp.frequency.value=near?900:420;const g=c.createGain();g.gain.value=near?.55:.32;s.connect(lp);lp.connect(g);g.connect(c.__o);s.start(c.currentTime+delay)}catch(e){}}
+let RS=null;function rainSound(on,amt){const c=actx();if(!c)return;try{if(on&&!RS){const n=c.sampleRate*2|0,buf=c.createBuffer(1,n,c.sampleRate),d=buf.getChannelData(0);for(let i=0;i<n;i++)d[i]=Math.random()*2-1;const s=c.createBufferSource();s.buffer=buf;s.loop=true;const hp=c.createBiquadFilter();hp.type='bandpass';hp.frequency.value=2400;hp.Q.value=.4;const g=c.createGain();g.gain.value=0;s.connect(hp);hp.connect(g);g.connect(c.__o);s.start();RS={s,g}}
+ if(RS)RS.g.gain.setTargetAtTime(on?.05*amt:0,c.currentTime,.6);if(!on&&RS&&RS.g.gain.value<.002){try{RS.s.stop()}catch(e){}RS=null}}catch(e){}}
+function bolt(dt,w){O.flash=Math.max(0,O.flash-dt*5);if(O.bolt){O.boltT-=dt;O.bolt.material.opacity=Math.max(0,O.boltT/.25);if(O.boltT<=0){SC.remove(O.bolt);O.bolt.geometry.dispose();O.bolt=null}}
+ if(w.bolt<.5)return;O.nextBolt-=dt;if(O.nextBolt>0)return;O.nextBolt=4+Math.random()*9;const f=(typeof P!=='undefined'&&P)?P:{x:0,z:0},a=Math.random()*6.28,r=25+Math.random()*60,x=f.x+Math.sin(a)*r,z=f.z+Math.cos(a)*r;let gy=0;try{gy=RT.terr.H(x,z)}catch(e){}
+ const pts=[];let px=x+(Math.random()-.5)*10,pz=z+(Math.random()-.5)*10;for(let y=gy+70;y>gy;y-=6){pts.push(new THREE.Vector3(px,y,pz));px+=(Math.random()-.5)*4;pz+=(Math.random()-.5)*4}pts.push(new THREE.Vector3(x,gy,z));
+ const g=new THREE.BufferGeometry().setFromPoints(pts);if(O.bolt){SC.remove(O.bolt);O.bolt.geometry.dispose()}O.bolt=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xeaf2ff,transparent:true,opacity:1,fog:false}));O.bolt.userData.noPick=1;SC.add(O.bolt);O.boltT=.25;O.flash=1;
+ setTimeout(()=>{O.flash=Math.max(O.flash,.7)},120);try{if(typeof sparks!=='undefined')sparks.emit(x,gy+.5,z,0xeaf2ff,24,10,.3,.5,-4)}catch(e){}thunder(Math.min(3,r/90),r<45)}
+
+/* ---------------- HUD chip + options ---------------- */
+let chip=null,pop=null;
+function hhmm(t){const m=Math.floor(t*1440),h=Math.floor(m/60)%24;return String(h).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function mkChip(){chip=document.createElement('button');chip.id='skychip';chip.type='button';chip.title='Time of day and weather';document.body.appendChild(chip);chip.addEventListener('click',e=>{e.stopPropagation();togglePop()});
+ const css=document.createElement('style');css.textContent=`#skychip{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(208px,calc(env(safe-area-inset-bottom) + 208px));z-index:25;display:none;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--ha,#8a6bff) 45%,#ffffff22);background:rgba(8,11,30,.72);color:#dfe6ff;font:700 11.5px var(--f,system-ui);letter-spacing:.04em;cursor:pointer;pointer-events:auto;backdrop-filter:blur(4px)}
+body.play #skychip.on{display:inline-flex}#skychip b{color:#fff}#skypop{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(240px,calc(env(safe-area-inset-bottom) + 240px));z-index:60;display:none;width:240px;padding:12px;border-radius:14px;background:#0b0f22f2;border:1px solid color-mix(in srgb,var(--ha,#8a6bff) 40%,#ffffff1a);color:#dfe6ff;font:600 12px var(--f,system-ui);box-shadow:0 12px 40px #0008}
+#skypop.on{display:block}#skypop h4{margin:0 0 6px;font:800 10.5px var(--f,system-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--go,#ffc94a)}#skypop .r{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}#skypop button{padding:4px 9px;border-radius:8px;border:1px solid #ffffff22;background:#ffffff0d;color:#dfe6ff;font:700 11px var(--f,system-ui);cursor:pointer}
+#skypop button.on{background:color-mix(in srgb,var(--ha,#8a6bff) 35%,#0b0f22);border-color:var(--ha,#8a6bff);color:#fff}#skypop small{display:block;opacity:.7;font-weight:500;line-height:1.35}
+html.mob #skychip{bottom:auto;top:calc(env(safe-area-inset-top) + 150px);right:max(10px,env(safe-area-inset-right))}html.mob #skypop{bottom:auto;top:calc(env(safe-area-inset-top) + 182px)}`;document.head.appendChild(css)}
+function togglePop(){if(!pop){pop=document.createElement('div');pop.id='skypop';document.body.appendChild(pop);pop.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('button');if(!b)return;if(b.dataset.t)O.time=b.dataset.t;if(b.dataset.w)O.wx=b.dataset.w;if(b.dataset.on)O.on=b.dataset.on==='1';save();drawPop()});addEventListener('pointerdown',e=>{if(pop.classList.contains('on')&&!pop.contains(e.target)&&e.target!==chip)pop.classList.remove('on')})}
+ pop.classList.toggle('on');drawPop()}
+function drawPop(){if(!pop)return;const B=(k,v,l)=>`<button data-${k}="${v}" class="${(k==='t'?O.time:k==='w'?O.wx:(O.on?'1':'0'))===v?'on':''}">${l}</button>`;
+ pop.innerHTML=`<h4>Time of day</h4><div class="r">${B('t','auto','Cycle')}${B('t','dawn','Dawn')}${B('t','day','Day')}${B('t','dusk','Dusk')}${B('t','night','Night')}</div><h4>Weather</h4><div class="r">${B('w','auto','Changing')}${ORDER.map(k=>B('w',k,WI[k]+' '+WN[k])).join('')}</div><h4>Sky effects</h4><div class="r">${B('on','1','On')}${B('on','0','Off')}</div><small>A day lasts 24 minutes. In multiplayer everyone shares the same sky unless you pin it here (pinning only changes your view).</small>`}
+function chipDraw(){if(!chip)mkChip();const show=O.on&&outdoor();chip.classList.toggle('on',show);if(!show){if(pop)pop.classList.remove('on');return}const t=O.t||dayT(),icon=(t<.23||t>.8)?'🌙':WI[O.cur];chip.innerHTML=`${icon} <b>${hhmm(t)}</b> · ${WN[O.cur]}`}
+
+/* ---------------- main loop ---------------- */
+let lt=performance.now(),ct=0;
+function frame(now){const dt=Math.min(.1,(now-lt)/1000);lt=now;try{
+ if(!O.on||!outdoor()||!O.base){restore();if(CL)CL.visible=false;if(RN)RN.visible=false;if(SN)SN.visible=false;rainSound(false,0)}
+ else{wxStep(dt);const w=wxMix();const a=(clock()/900)%(Math.PI*2);O.wind.set(Math.cos(a),Math.sin(a));light(dt);clouds(dt,w);precip(dt,w);bolt(dt,w);rainSound(w.rain>.05,w.rain)}
+ ct-=dt;if(ct<=0){ct=.5;chipDraw()}}catch(e){console.warn('[sky]',e)}requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+return{O,dayT,wxNow,set:(k,v)=>{O[k]=v;save()}}})();
+</script>
 <script>
 /* ============ MAIN · boot, mode switching, render loop ============ */
 let MODE='play',last=performance.now(),objT=0;
