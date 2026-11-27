@@ -2673,7 +2673,7 @@ function hitE(e,dmg,o){o=o||{};let dx=o.dx,dz=o.dz;if(dx===undefined){dx=e.x-P.x
  if(dmg>0&&KIT().backstab&&!o.noBack){if(P.ambush&&P.stealthT>0){P.ambush=0;endStealth();o.crit=true;dmg*=2.5/1.5;o.back=2}else if(P.backT>0||behindE(e)){o.crit=true;dmg*=KIT().backstab/1.5;o.back=1}}
  const crit=!!o.crit||(dmg>0&&!(typeof AKC!=='undefined'&&AKC)&&P.crit>0&&Math.random()<P.crit);if(dmg>0){if(crit)dmg*=1.5;dmg*=nowDm()*(e.ly>0?1.15:1)*(e.curseT>0?1.2:1);if(o.back)dmgNum(e.x,e.y+(e.ly||0)+e.h+.7,e.z,o.back===2?'AMBUSH':'BACKSTAB','crit')}
  const RS=(typeof EVA!=='undefined')&&EVA.roll(e,o);   /* stagger resistance: a resisted hit still hurts but does not stagger, launch or shove the foe */
- if(dmg>0){const _mg=!!o.mag;window.IMPC={imp:_mg?'impactMagic':KIT().imp?KIT().imp:Hero.key==='talos'?'impactAxe':(Hero.key==='starr'||Hero.key==='dante'||Hero.key==='aurealius')?'impactSteel':Hero.key==='willow'&&o.arrow?'impactArrow':'impactMartial',fire:!!(o.fire||Hero.key==='talos'||KIT().warm)&&!_mg,stun:o.stun,launch:o.launch,big:o.big,silent:!!o.silent};hurtEnemy(e,dmg,dx,dz,(o.kb===undefined?6:o.kb)*(RS?.2:1),crit||o.big);window.IMPC=null}else{e.kx+=dx*(o.kb||0)*(e.boss?.12:1);e.kz+=dz*(o.kb||0)*(e.boss?.12:1);e.aggro=true}
+ if(dmg>0){const _mg=!!o.mag;window.IMPC={imp:_mg?'impactMagic':KIT().imp?KIT().imp:Hero.key==='talos'?'impactAxe':(Hero.key==='starr'||Hero.key==='dante'||Hero.key==='aurealius')?'impactSteel':Hero.key==='willow'&&o.arrow?'impactArrow':'impactMartial',fire:!!(o.fire||Hero.key==='talos'||KIT().warm)&&!_mg&&!KIT().noFireImp,stun:o.stun,launch:o.launch,big:o.big,silent:!!o.silent};hurtEnemy(e,dmg,dx,dz,(o.kb===undefined?6:o.kb)*(RS?.2:1),crit||o.big);window.IMPC=null}else{e.kx+=dx*(o.kb||0)*(e.boss?.12:1);e.kz+=dz*(o.kb||0)*(e.boss?.12:1);e.aggro=true}
  const hp=VX.v3(e.x,e.y+(e.ly||0)+e.h*.58,e.z),mg=!!o.mag,wm=Hero.key==='talos'||(Hero.key==='akira'&&!mg)||!!o.fire||!!KIT().warm;if(dmg>0&&!o.silent){VX.hit(hp,{col:mg?(o.col||glowC()):(o.col||glowC()),mag:mg,warm:wm&&!mg,big:!!(o.big||crit)});if(typeof IMP==='undefined')VX.snd(mg?'impactMagic':KIT().imp?KIT().imp:Hero.key==='talos'?'impactAxe':(Hero.key==='starr'||Hero.key==='dante'||Hero.key==='aurealius')?'impactSteel':Hero.key==='willow'&&o.arrow?'impactArrow':'impactMartial')}
  if(e.dead)return true;
  if(dmg>0&&P.venomT>0&&!o.noVenom)poison(e,5,4);
@@ -2821,7 +2821,7 @@ function updAct(dt){const a=P.act;if(!a)return;a.t+=dt;const u=a.t/a.d;for(const
  if(a.isAtk&&K.mouse&&!P.dead&&u>=a.cancel-.2)P.queue=true;
  if(a.isAtk&&P.queue&&u>=a.cancel){endAct();P.comboT=.7;P.queue=false;beginCombo();return}
  if(u>=1){const was=endAct();if(was.isAtk){P.comboT=.7;if(P.queue){P.queue=false;beginCombo()}}}}
-function beginCombo(){const K=KIT();if(!K.combo.length)return;P.combo=P.comboT>0&&P.combo>=0?(P.combo+1)%K.combo.length:0;if(P.comboLast!==undefined&&P.comboT<=0)P.combo=0;const def=K.combo[P.combo];if(def.mp){if(P.mana<def.mp){P.combo=Math.max(0,P.combo-1);if(!P.mtoast||TIME-P.mtoast>1.2){P.mtoast=TIME;toast('Not enough mana','bad')}return}P.mana-=def.mp}P.comboLast=P.combo;beginAct(def,true);sfx(300+P.combo*70,.1,'sawtooth',.03,400)}
+function beginCombo(){const K=KIT();if(!K.combo.length)return;P.combo=P.comboT>0&&P.combo>=0?(P.combo+1)%K.combo.length:0;if(P.comboLast!==undefined&&P.comboT<=0)P.combo=0;const def=K.combo[P.combo];if(def.mp){if(P.mana<def.mp){P.combo=Math.max(0,P.combo-1);if(!P.mtoast||TIME-P.mtoast>1.2){P.mtoast=TIME;toast('Not enough mana','bad')}return}P.mana-=def.mp}P.comboLast=P.combo;beginAct(def,true);if(!KIT().noSwing)sfx(300+P.combo*70,.1,'sawtooth',.03,400)}
 function startAttack(){if(P.dead||P.roll>0||transition||P.dash||P.leap)return;const K=KIT();
  if(K.bow){if(!P.act&&!P.drawing){P.drawing=1;P.drawT=0;P.drawFull=0;VX.snd('bowDraw')}return}
  if(!P.grounded&&K.jump&&!P.act){beginAct(K.jump,true);P.queue=false;return}
@@ -8864,6 +8864,7 @@ KITS.luxio={name:'Luxio',role:'Archfiend of the Ember Throne',desc:'The First Fl
   AB('cata','Cataclysm',22,'✺','#ff5a1e','Gather the Ember Throne’s fury, then detonate: a 7m inferno for 48 damage that launches foes and scorches the ground. Costs 8% of your health.','cataclysm',1.0,[[.35,()=>{ring(P.x,P.z,XC,7,.5);for(let i=0;i<10;i++)VX.puff('aura',v3(P.x+(Math.random()-.5)*6,P.y+.3,P.z+(Math.random()-.5)*6),v3(0,3,0),.5,.6,.2,0xff4a12,.6)}],[.7,()=>{const x=P.x,z=P.z;P.hp=Math.max(1,P.hp-P.max*.08);slamFx(x,z,XC,7);slamFx(x,z,0xff8a2a,4.5);VX.explode(v3(x,P.y+.6,z),3.2,0xff6a2a,true,true);aoe(x,z,7,48*P.pm,{kb:12,stun:1,big:1,launch:7,col:XC,fire:1});for(const e of ENEM)if(liveE(e)&&inR(e,x,z,7))HZ.burnE(e,6*P.pm,4);scorch(x,z,5,4);shake(.8);HS=Math.max(HS,.12);snd('boom')}]],{armor:1})]};
 function updBrands(){for(let i=BRANDS.length-1;i>=0;i--){const b=BRANDS[i],e=b.e;if(!e||(e.dead&&!b.boomed)||TIME>=b.u){BRANDS.splice(i,1);if(!e)continue;const x=e.x,z=e.z;const sv=P.pm;P.pm=b.pm;try{VX.explode(v3(x,(e.y||gY(x,z))+1,z),2,0xff3a1a,true,true);slamFx(x,z,XC,4);if(!e.dead)hitE(e,40*P.pm,{kb:6,stun:.6,big:1,col:XC,fire:1});aoe(x,z,4,20*P.pm,{kb:7,col:XC,fire:1,once:new Set([e])});for(const q of ENEM)if(liveE(q)&&inR(q,x,z,4))HZ.burnE(q,4*P.pm,3);shake(.35)}finally{P.pm=sv}}
   else if(Math.random()<.3)sparks.emit(e.x,e.y+(e.ly||0)+e.h+.3,e.z,XC,2,2,.2,.3,1)}}
+KITS.lucia.noSwing=1;KITS.lucia.noFireImp=1;
 for(const k of PREM){const K=KITS[k];K.key=k;K.mana=K.mana||0;NEWK.push(k)}
 Object.assign(TRK,{lucia:['tip'],luxio:['tip']});
 const SND_={slash:()=>VX.A([['slash',{gain:.55,rate:1.15,pj:.1}]]),holy:()=>VX.A([['heal',{gain:.6,rate:1.2}],['plate',{gain:.2,rate:1.8,delay:.02}]]),smite:()=>VX.A([['exp',{gain:.6,rate:1.3}],['heal',{gain:.7,rate:.85,delay:.02}]]),
@@ -9163,9 +9164,9 @@ const LV={slash:[[988,1319],[1175,1568],[1047,1397],[880,1175,1319],[1319,1175],
  holy:[[1047,1319,1568],[1175,1480,1760],[988,1319,1568,1976],[1319,1568,2093],[880,1109,1319]],
  smite:[[784,988,1175,1568,1976],[698,880,1047,1397,1760],[880,1109,1319,1760,2217]]};
 const LL={};function lv(k){const a=LV[k];let i=(Math.random()*a.length)|0;if(i===LL[k])i=(i+1)%a.length;LL[k]=i;return a[i]}
-const SND_L={slash:()=>{VX.A([['slash',{gain:.3,rate:.98+Math.random()*.14,pj:.06,lp:3000}]]);chime(lv('slash'),.04+Math.random()*.012,.02,.32)},
- holy:()=>{VX.A([['heal',{gain:.22,rate:1.08+Math.random()*.14,lp:3400}]]);chime(lv('holy'),.038,.02,.4)},
- smite:()=>{VX.A([['exp',{gain:.38,rate:1.05,lp:2800}]]);chime(lv('smite'),.055,.022,.6)},
+const SND_L={slash:()=>{chime(lv('slash'),.04+Math.random()*.012,.02,.32)},
+ holy:()=>{chime(lv('holy'),.038,.02,.4)},
+ smite:()=>{chime(lv('smite'),.055,.022,.6)},
  fire:()=>SND_.fire(),boom:()=>SND_.boom()};
 {const _s=snd;snd=function(k){if(iam('lucia')&&SND_L[k]){try{SND_L[k]()}catch(e){}return}_s(k)}}
 try{if(VX&&VX.snd){const _v=VX.snd;VX.snd=function(n){if(iam('lucia')&&playOn&&n==='dodge'){chimeOld([392,523,659],.05,.02,.35);try{VX.A([['fire',{id:'fire3b',gain:.22,rate:.9,lp:2600}]])}catch(e){}return}return _v.apply(this,arguments)}}}catch(e){}
