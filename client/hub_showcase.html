@@ -73,7 +73,7 @@ html.mob.portrait #mob-rot{position:fixed;inset:0;z-index:2147483000;display:fle
      shopUrl : (optional) a Wix page that sells star packs, used when the game is NOT embedded in Wix
      wixOrigins : (optional) the origins allowed to talk to the game, e.g. ["https://www.yoursite.com"]
      packs   : (optional) override the shop's star packs, e.g. [{sku:"stars_100",stars:100,price:"$0.99"}]  -->
-<script id="nca-config">window.NCA_CONFIG={server:"",shopUrl:"",wixOrigins:[],packs:null};</script>
+<script id="nca-config">window.NCA_CONFIG={music:"../../music/",server:"",shopUrl:"",wixOrigins:[],packs:null};</script>
 <title>Neon Codex Massive · Hub Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -5209,7 +5209,7 @@ function updEBars(dt){if(!playOn||typeof S==='undefined'||!S){if(EBR.list.length
    * Menus: whenever any menu opens the mouse is released and shown as an Aurealium-Order cursor (gold blade, cyan sigil).
    * Esc (which releases the mouse in the browser) opens the pause menu. */
 const AUD=(()=>{
-const A={m:.8,fx:1,voice:1,mute:false,hid:true,list:[]};
+const A={m:.8,fx:1,voice:1,music:.55,mute:false,hid:true,list:[]};
 function node(c){let n=c.__aud;if(!n){const mg=c.createGain();mg.gain.value=A.mute?0:A.m;mg.connect(c.destination);n=c.__aud={mg,cats:{}};A.list.push(c)}return n}
 A.cat=(c,k)=>{try{if(!c||!c.createGain||(typeof OfflineAudioContext!=='undefined'&&c instanceof OfflineAudioContext))return c.destination;const n=node(c);let g=n.cats[k];if(!g){g=c.createGain();g.gain.value=A[k];g.connect(n.mg);n.cats[k]=g}return g}catch(e){return c.destination}};
 A.apply=()=>{const hid=A.hid&&document.hidden;for(const c of A.list){const n=c.__aud;if(!n)continue;try{n.mg.gain.setTargetAtTime(A.mute||hid?0:A.m,c.currentTime,.03);for(const k in n.cats)n.cats[k].gain.setTargetAtTime(A[k],c.currentTime,.03)}catch(e){}}
@@ -5223,7 +5223,7 @@ const D_LOOK={outline:true,fx:true,fxDensity:2,post:true,bloom:1.65,vig:1,grain:
 const D_Q={res:1,ms:4,shadow:2048,vd:260,cap:0,auto:true,target:40,fps:false};
 const D_CTL={sens:1,inv:false,cam:true,fov:0,shake:1};
 const D_GP={dn:true,eb:true,combo:true,hurt:true};
-const D_AUD={m:.8,fx:1,voice:1,mute:false,hid:true};
+const D_AUD={m:.8,fx:1,voice:1,music:.55,mute:false,hid:true};
 const PRE={ultra:{res:1,ms:4,shadow:2048,vd:260,fxd:2},high:{res:.9,ms:2,shadow:2048,vd:220,fxd:1.5},medium:{res:.8,ms:2,shadow:1024,vd:170,fxd:1},low:{res:.6,ms:0,shadow:512,vd:120,fxd:.5}};
 /* quality ladder: level 0 = everything the user chose; each step trades a little resolution / shadow detail / far-away stuff / particles */
 const LAD=[{res:1,ms:4,sh:2048,vd:260,fx:1},{res:1,ms:4,sh:2048,vd:210,fx:.85},{res:.9,ms:4,sh:2048,vd:175,fx:.7},{res:.85,ms:2,sh:1024,vd:150,fx:.6},{res:.75,ms:2,sh:1024,vd:130,fx:.5},{res:.7,ms:0,sh:1024,vd:115,fx:.4},{res:.6,ms:0,sh:512,vd:100,fx:.3},{res:.5,ms:0,sh:0,vd:90,fx:.25}];
@@ -5232,8 +5232,8 @@ let saveT=0,lastDraw=0,holdUntil=0,win={t:0,n:0},up=0,bad={},lastUp=0,fpsEl=null
 O.avg=0;
 /* ---------- persistence ---------- */
 function load(){try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j){for(const k of['q','look','ctl','gp'])Object.assign(O[k],j[k]||{});Object.assign(AUD,j.aud||{});O.lvl=Math.max(0,Math.min(LAD.length-1,j.lvl|0))}}catch(e){}
- for(const k of['m','fx','voice','mute','hid'])if(AUD[k]===undefined)AUD[k]=D_AUD[k]}
-function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify({q:O.q,look:O.look,ctl:O.ctl,gp:O.gp,aud:{m:AUD.m,fx:AUD.fx,voice:AUD.voice,mute:AUD.mute,hid:AUD.hid},lvl:O.lvl}))}catch(e){}},400)}
+ for(const k of['m','fx','voice','music','mute','hid'])if(AUD[k]===undefined)AUD[k]=D_AUD[k]}
+function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify({q:O.q,look:O.look,ctl:O.ctl,gp:O.gp,aud:{m:AUD.m,fx:AUD.fx,voice:AUD.voice,music:AUD.music,mute:AUD.mute,hid:AUD.hid},lvl:O.lvl}))}catch(e){}},400)}
 O.onOpt=()=>{if(!ready)return;let ch=false;for(const k in D_LOOK)if(O.look[k]!==OPT[k]){O.look[k]=OPT[k];ch=true}if(ch)save()};
 /* ---------- graphics ---------- */
 function eff(){const u=O.q,L=LAD[O.lvl],a=O.auto!==false&&u.auto?L:LAD[0];
@@ -5316,7 +5316,7 @@ function build(){const q=O.q,pre=Object.keys(PRE).find(k=>PRE[k].res===q.res&&PR
   ${seg('q.cap','FPS limit',[[0,'None'],[30,'30'],[60,'60'],[120,'120']])}${tg('q.fps','Show FPS counter')}
   <div class="sm-sec">Look</div>${tg('look.outline','Outlines')}${tg('look.post','Post-processing (bloom, grade, grain)')}${tg('look.fx','Particles & glow')}${tg('look.shadows','Shadows')}
   ${sl('look.thick','Outline width',.01,.14,.005,f2)}${sl('look.bloom','Bloom',0,2.5,.05,f2)}${sl('look.exposure','Exposure',.5,1.8,.05,f2)}${sl('look.sat','Saturation',.5,1.6,.05,f2)}${sl('look.vig','Vignette',0,1,.05,f2)}${sl('look.grain','Film grain',0,.12,.005,v=>(+v).toFixed(3))}${sl('look.ca','Chromatic aberration',0,.006,.0002,v=>(+v).toFixed(4))}`,
- aud:`<div class="sm-sec">Volume</div>${sl('aud.m','Master',0,1,.05,pc)}${sl('aud.fx','Effects & combat',0,1,.05,pc)}${sl('aud.voice','Voices & creatures',0,1,.05,pc)}${tg('aud.mute','Mute everything')}${tg('aud.hid','Silence when the tab is in the background')}
+ aud:`<div class="sm-sec">Volume</div>${sl('aud.m','Master',0,1,.05,pc)}${sl('aud.fx','Effects & combat',0,1,.05,pc)}${sl('aud.voice','Voices & creatures',0,1,.05,pc)}${sl('aud.music','Music',0,1,.05,pc)}${tg('aud.mute','Mute everything')}${tg('aud.hid','Silence when the tab is in the background')}
   <div class="sm-r"><span>Test sound</span><div><button class="pb sm" data-a="test">Play</button></div></div>`,
  ctl:`<div class="sm-sec">Mouse &amp; camera</div>${tg('ctl.cam','Mouse-look camera','On: click the game to capture the mouse. Off: classic hub camera (V toggles).')}${sl('ctl.sens','Mouse sensitivity',.3,2.5,.05,f2)}${tg('ctl.inv','Invert Y axis')}${sl('ctl.fov','Field of view',-10,20,1,v=>(v>0?'+':'')+v+'°')}${sl('ctl.shake','Camera shake',0,1.5,.1,pc)}
   <div class="sm-sec">Keys</div><div class="sm-keys"><div><kbd>W A S D</kbd>Move</div><div><kbd>Shift</kbd>Sprint</div><div><kbd>Space</kbd>Jump</div><div><kbd>Space</kbd> on a wall: wall-jump</div><div><kbd>LMB</kbd>Attack</div><div><kbd>RMB / B</kbd>Block</div><div><kbd>1-4 · F · Q</kbd>Abilities</div><div><kbd>E</kbd>Interact / ability</div><div><kbd>R</kbd>Roll</div><div><kbd>H</kbd>Champion select</div><div><kbd>J</kbd>Journal</div><div><kbd>V</kbd>Camera mode</div><div><kbd>Esc</kbd>Release mouse · Pause</div></div>`,
@@ -5334,7 +5334,7 @@ function mkUI(){if(ovEl)return;ovEl=document.createElement('div');ovEl.id='setm'
   const sg=e.target.closest('.seg b');if(sg){const box=sg.parentNode;if(box.dataset.pre){const v=sg.dataset.v;if(PRE[v]){const p=PRE[v];Object.assign(O.q,{res:p.res,ms:p.ms,shadow:p.shadow,vd:p.vd});OPT.fxDensity=p.fxd;O.lvl=0;O.apply(true);applyOpt();save();render()}return}
    const p=box.dataset.k;if(p){const raw=sg.dataset.v;setv(p,isNaN(+raw)?raw:+raw);render()}return}
   const tb=e.target.closest('button.tgl2');if(tb){const p=tb.dataset.k;setv(p,!get(p));render()}});
- ovEl.addEventListener('input',e=>{const r=e.target;if(r.type!=='range')return;const p=r.dataset.k,v=+r.value;setv(p,v);const em=r.parentNode.querySelector('em');if(em){const fm={'q.res':pc,'aud.m':pc,'aud.fx':pc,'aud.voice':pc,'ctl.shake':pc,'q.vd':x=>x+' m','ctl.fov':x=>(x>0?'+':'')+x+'°','look.grain':x=>(+x).toFixed(3),'look.ca':x=>(+x).toFixed(4)};em.textContent=(fm[p]||f2)(v)}});
+ ovEl.addEventListener('input',e=>{const r=e.target;if(r.type!=='range')return;const p=r.dataset.k,v=+r.value;setv(p,v);const em=r.parentNode.querySelector('em');if(em){const fm={'q.res':pc,'aud.m':pc,'aud.fx':pc,'aud.voice':pc,'aud.music':pc,'ctl.shake':pc,'q.vd':x=>x+' m','ctl.fov':x=>(x>0?'+':'')+x+'°','look.grain':x=>(+x).toFixed(3),'look.ca':x=>(+x).toFixed(4)};em.textContent=(fm[p]||f2)(v)}});
  pmEl.addEventListener('click',e=>{const a=e.target.closest('[data-a]');if(!a)return;const x=a.dataset.a;if(x==='resume')O.pauseOff(true);else if(x==='settings'){O.open()}else if(x==='chapters'){O.pauseOff();try{openChapters()}catch(er){}}else if(x==='tut'){O.pauseOff();if(typeof TUT!=='undefined')TUT.start(true)}else if(x==='mainmenu'){PROF.toMenu()}else if(x==='tutskip'){O.pauseOff();if(typeof TUT!=='undefined')TUT.end(true)}});
  setInterval(()=>{if(ovEl.classList.contains('on'))live()},500)}
 O.open=function(t){mkUI();if(t)tab=t;pmEl.classList.remove('on');ovEl.classList.add('on');if(!paused){pausePrev=!!window.__pause;window.__pause=true;paused=true}render();if(document.pointerLockElement)document.exitPointerLock()};
@@ -9142,7 +9142,7 @@ function hoverFrame(dt){const ok=playOn&&!P.dead&&(iam('lucia')||iam('luxio'))&&
  if(P.dash||P.leap||P.roll>0){JH.t=0;return}
  if(!JH.used&&(P.jb||0)>0&&(P.coy||0)<=0&&JH.air>.08){P.jb=0;JH.used=1;JH.t=.8;P.vy=Math.max(P.vy||0,3.4);const c=iam('lucia')?0xffe6a0:0xff6a2a;
   try{sparks.ring(P.x,P.y+.4,P.z,c,14,3.2,.2,.35);sparks.emit(P.x,P.y+1.2,P.z,c,10,2.6,.25,.45,-1)}catch(e){}
-  if(iam('lucia'))chime([1175,1568],.05,.022,.3);else try{VX.A([['fire',{id:'fire3b',gain:.3,rate:.8,lp:2600}]])}catch(e){}}
+  if(iam('lucia'))chimeOld([523,659,784],.04,.026,.3);else try{VX.A([['fire',{id:'fire3b',gain:.3,rate:.8,lp:2600}]])}catch(e){}}
  if(JH.t>0){JH.t-=dt;if(JH.t<.62)P.vy=-.18+Math.sin(JH.t*18)*.2;if(Math.random()<.35){const c=iam('lucia')?0xfff0c0:0xff4a12;try{sparks.emit(P.x+(Math.random()-.5)*1.2,P.y+1,P.z+(Math.random()-.5)*1.2,c,1,1.2,.2,.4,-2)}catch(e){}}}}
 
 /* ----- Lucia: warmer, cheerier sounds (soft chimes in place of the bright metallic ring) ----- */
@@ -9156,12 +9156,19 @@ function bell(f,at,dur,vol,glide){try{if(typeof MUTE!=='undefined'&&MUTE)return;
   const o3=c.createOscillator();o3.type='sine';o3.frequency.setValueAtTime(f*3.01,n);const g3=c.createGain();g3.gain.setValueAtTime(.12,n);g3.gain.exponentialRampToValueAtTime(.0001,n+dur*.3);o3.connect(g3);g3.connect(lp);
   o1.connect(lp);for(const o of[o1,o2,o3]){o.start(n);o.stop(n+dur+.05)}BELLN=(BELLN|0)+1}catch(e){BELLE=String(e)}}
 function chime(notes,step,vol,dur,type){const now=performance.now();if(now-CHL<60)return;CHL=now;notes.forEach((f,i)=>bell(f,i*(step||.05),dur||.4,(vol||.022)*2.2,i===0))}
-const SND_L={slash:()=>{VX.A([['slash',{gain:.3,rate:1.05,pj:.06,lp:3000}]]);const up=Math.random()<.5;chime(up?[988,1319]:[1175,1568],.045,.02,.32)},
- holy:()=>{VX.A([['heal',{gain:.22,rate:1.15,lp:3400}]]);chime([1047,1319,1568],.04,.02,.4)},
- smite:()=>{VX.A([['exp',{gain:.38,rate:1.05,lp:2800}]]);chime([784,988,1175,1568,1976],.055,.022,.6)},
+/* the earlier soft chime (kept for Lucia's roll and her jump flutter, which players liked) */
+let CHO=0;function chimeOld(notes,step,vol,dur,type){const n=performance.now();if(n-CHO<70)return;CHO=n;notes.forEach((f,i)=>setTimeout(()=>{try{sfx(f,dur||.35,type||'sine',vol||.022,0);sfx(f/2,(dur||.35)*.8,'triangle',(vol||.022)*.5,0)}catch(e){}},i*(step||.05)*1000))}
+/* more variety: each sound picks one of several little motifs, never the same one twice in a row */
+const LV={slash:[[988,1319],[1175,1568],[1047,1397],[880,1175,1319],[1319,1175],[1047,1319,1568]],
+ holy:[[1047,1319,1568],[1175,1480,1760],[988,1319,1568,1976],[1319,1568,2093],[880,1109,1319]],
+ smite:[[784,988,1175,1568,1976],[698,880,1047,1397,1760],[880,1109,1319,1760,2217]]};
+const LL={};function lv(k){const a=LV[k];let i=(Math.random()*a.length)|0;if(i===LL[k])i=(i+1)%a.length;LL[k]=i;return a[i]}
+const SND_L={slash:()=>{VX.A([['slash',{gain:.3,rate:.98+Math.random()*.14,pj:.06,lp:3000}]]);chime(lv('slash'),.04+Math.random()*.012,.02,.32)},
+ holy:()=>{VX.A([['heal',{gain:.22,rate:1.08+Math.random()*.14,lp:3400}]]);chime(lv('holy'),.038,.02,.4)},
+ smite:()=>{VX.A([['exp',{gain:.38,rate:1.05,lp:2800}]]);chime(lv('smite'),.055,.022,.6)},
  fire:()=>SND_.fire(),boom:()=>SND_.boom()};
 {const _s=snd;snd=function(k){if(iam('lucia')&&SND_L[k]){try{SND_L[k]()}catch(e){}return}_s(k)}}
-try{if(VX&&VX.snd){const _v=VX.snd;VX.snd=function(n){if(iam('lucia')&&playOn&&n==='dodge'){chime([659,880,1175,1568],.04,.022,.38);try{VX.A([['fire',{id:'fire3b',gain:.16,rate:1.1,lp:2400}]])}catch(e){}return}return _v.apply(this,arguments)}}}catch(e){}
+try{if(VX&&VX.snd){const _v=VX.snd;VX.snd=function(n){if(iam('lucia')&&playOn&&n==='dodge'){chimeOld([392,523,659],.05,.02,.35);try{VX.A([['fire',{id:'fire3b',gain:.22,rate:.9,lp:2600}]])}catch(e){}return}return _v.apply(this,arguments)}}}catch(e){}
 
 /* ----- winged foes: an occasional Flutter (a quick evasive hop) and Flutter Strike (rise, hang, swoop) ----- */
 function wingOf(e){if(e._wg!==undefined)return e._wg;let W=null;try{e.g.traverse(o=>{if(!W&&o.userData&&o.userData.wingW)W=o.userData.wingW})}catch(x){}e._wg=W;return W}
@@ -10257,6 +10264,73 @@ window.NCS=function(dt){const want=SHO.on&&typeof MODE!=='undefined'&&MODE==='pl
  CAM.position.addScaledVector(_r,off).addScaledVector(_u,up)};
 
 return{migrateHub,hubTerrain,dress,ST,D,PN,SHO}})();
+</script>
+<script id="nca-music">
+/* =====================================================================
+   NCMU · background music + NPC chirps
+   Tracks stream from the music/ folder next to index.html (override with NCA_CONFIG.music = 'https://…/music/').
+   Main menu → Codex Awakening · central hub → Aurealium Haven · chapters / arenas → Beneath the Embervault or
+   Prismatic Depths (by the chapter's look) · boss fights → The Rift Sovereign or Ironbound Cataclysm (alternating
+   chapter by chapter in both books) · victory screen and big menus (chapters, champions, store) → Banners of the Dawn.
+   Crossfades between tracks, ducks under the pause menu, starts on the first tap/click (browser autoplay rules),
+   and plays on the 'music' bus so Settings → Audio → Music, Master, Mute and background-tab silence all apply.
+   NPCs chirp: soft robotic beeps and trills while their lines type out (each NPC has its own pitch).
+   ===================================================================== */
+const NCMU=(()=>{
+const T={menu:'codex-awakening',hub:'aurealium-haven',ember:'beneath-the-embervault',prism:'prismatic-depths',rift:'the-rift-sovereign',iron:'ironbound-cataclysm',dawn:'banners-of-the-dawn'};
+const base=()=>{const c=(window.NCA_CONFIG||{}).music;if(c)return c.endsWith('/')?c:c+'/';return 'music/'};
+const O={ctx:null,cur:null,want:null,el:{},g:{},on:false,failed:{},duck:1,vol:1,off:false};
+function ctx(){if(O.ctx)return O.ctx;try{O.ctx=new(window.AudioContext||window.webkitAudioContext)();O.out=O.ctx.createGain();O.out.gain.value=1;O.out.connect(typeof AUD!=='undefined'?AUD.cat(O.ctx,'music'):O.ctx.destination)}catch(e){O.ctx=null}return O.ctx}
+function track(k){if(O.el[k])return O.el[k];const c=ctx();if(!c)return null;const a=new Audio();a.preload='auto';a.loop=true;if(/^https?:/.test(base())&&!base().startsWith(location.origin))a.crossOrigin='anonymous';a.src=base()+T[k]+'.mp3';
+ a.addEventListener('error',()=>{O.failed[k]=1;if(!O.warned){O.warned=1;console.warn('[music] could not load',a.src,'— put the music/ folder next to index.html')}});
+ let g;try{const s=c.createMediaElementSource(a);g=c.createGain();g.gain.value=0;s.connect(g);g.connect(O.out)}catch(e){g=null}O.el[k]=a;O.g[k]=g;return a}
+function fadeTo(k){if(O.cur===k)return;const c=ctx();if(!c)return;const now=c.currentTime;
+ if(O.cur&&O.g[O.cur]){const old=O.cur,g=O.g[old];g.gain.cancelScheduledValues(now);g.gain.setValueAtTime(g.gain.value,now);g.gain.linearRampToValueAtTime(0,now+1.6);setTimeout(()=>{if(O.cur!==old){try{O.el[old].pause()}catch(e){}}},1800)}
+ O.cur=k;if(!k||O.failed[k])return;const a=track(k);if(!a)return;const g=O.g[k];
+ if(k==='dawn'||k==='rift'||k==='iron'){try{if(a.paused)a.currentTime=0}catch(e){}}
+ const p=a.play();if(p&&p.catch)p.catch(()=>{});if(g){g.gain.cancelScheduledValues(now);g.gain.setValueAtTime(g.gain.value,now);g.gain.linearRampToValueAtTime(1,now+(O.started?1.6:2.4))}O.started=true}
+/* ---- which track fits what is on screen ---- */
+const vis=id=>{const e=document.getElementById(id);return!!(e&&e.classList.contains('on'))};
+function chapterNum(id){const m=/^ch(\d+)$/.exec(id||'');return m?+m[1]:0}
+const EMBER=new Set(['ember','abyss','solar','gilded','cloister','codex','forge','crypt']);
+function pick(){try{
+ if(vis('mainm'))return 'menu';
+ if(vis('complete'))return 'dawn';
+ if(vis('chsel')||vis('hsel')||vis('c7pro'))return 'dawn';
+ if(typeof S==='undefined'||!S)return O.cur||'menu';
+ const id=S.id||'';if(id==='hub'||S.type==='hub'||S.visit)return 'hub';
+ const n=chapterNum(id)||chapterNum(S.parentCh||'');
+ const boss=typeof ENEM!=='undefined'&&ENEM.some(e=>e.boss&&!e.dead&&(e.engaged||e.aggro)&&Math.hypot(e.x-P.x,e.z-P.z)<55);
+ if(boss)return (n||(id.length))%2===1?'rift':'iron';
+ if(n)return (EMBER.has(S.theme)?(n%3===0?'prism':'ember'):(n%3===0?'ember':'prism'));
+ if(S.tr){const k=String(S.tr);return (k.charCodeAt(0)+k.length)%2?'ember':'prism'}
+ return EMBER.has(S.theme)?'ember':'prism'}catch(e){return O.cur}}
+function tick(){if(!O.on)return;const w=O.off?null:pick();if(w!==O.cur)fadeTo(w);
+ /* duck under the pause / settings menu and the codex */
+ const d=(vis('setm')||(typeof NETUI!=='undefined'&&NETUI.isOpen&&NETUI.isOpen('cdxp')))?.45:1;if(d!==O.duck&&O.out){O.duck=d;try{O.out.gain.setTargetAtTime(d,O.ctx.currentTime,.25)}catch(e){}}}
+function start(){if(O.on){try{if(O.ctx&&O.ctx.state==='suspended')O.ctx.resume()}catch(e){}return}const c=ctx();if(!c)return;try{c.resume()}catch(e){}O.on=true;tick()}
+['pointerdown','touchend','keydown','click'].forEach(ev=>addEventListener(ev,start,{passive:true}));
+setInterval(tick,400);
+
+/* ---------------- NPC chirps ---------------- */
+let CX=null;const cx=()=>{if(!CX){try{CX=new(window.AudioContext||window.webkitAudioContext)();CX.__out=CX.createGain();CX.__out.gain.value=1;CX.__out.connect(typeof AUD!=='undefined'?AUD.cat(CX,'voice'):CX.destination)}catch(e){}}if(CX&&CX.state==='suspended')try{CX.resume()}catch(e){}return CX};
+addEventListener('pointerdown',()=>{try{CX&&CX.resume()}catch(e){}},{passive:true});
+function blip(c,t,f,d,type,vol,bend){const o=c.createOscillator(),g=c.createGain(),lp=c.createBiquadFilter();lp.type='lowpass';lp.frequency.value=3200;o.type=type;o.frequency.setValueAtTime(f,t);if(bend)o.frequency.exponentialRampToValueAtTime(f*bend,t+d);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(lp);lp.connect(g);g.connect(c.__out);o.start(t);o.stop(t+d+.02)}
+const hash=s=>{let h=7;for(const ch of String(s||''))h=(h*31+ch.charCodeAt(0))>>>0;return h};
+/* a burst of beeps and little trills for a line of text; seconds is roughly how long the text takes to type */
+function chirp(who,text,seconds){const c=cx();if(!c)return;const h=hash(who),base=420+(h%9)*55,n=Math.max(2,Math.min(14,Math.round((seconds||((text||'').length*.016))/.085)));let t=c.currentTime+.01;
+ const r=(i)=>((h>>(i%24))&7)/7;
+ for(let i=0;i<n;i++){const kind=(i+h)%5,f=base*(1+r(i)*.6)*(i===n-1?1.25:1);
+  if(kind===0)blip(c,t,f,.05,'square',.012,1.18);else if(kind===1)blip(c,t,f*1.5,.035,'sine',.02,.85);else if(kind===2){blip(c,t,f,.03,'triangle',.02,1);blip(c,t+.035,f*1.33,.03,'triangle',.018,1)}else if(kind===3)blip(c,t,f*.8,.06,'sine',.02,1.5);else blip(c,t,f*1.2,.04,'square',.009,.9);
+  t+=.07+r(i+3)*.04;if((text||'').length&&i%4===3)t+=.05}
+ /* a happy little trill at the end of a question or exclamation */
+ if(/[!?]\s*["”]?$/.test(text||''))blip(c,t+.02,base*2,.09,'sine',.018,1.6)}
+try{const _n=talkNext;talkNext=function(){const had=typeof TK!=='undefined'&&TK&&TK.lines&&TK.lines.length?TK.lines[0]:'';const r=_n.apply(this,arguments);try{if(had&&TK){const nm=(TK.N&&(TK.N.name||TK.N.id))||'npc';chirp(nm,had,Math.min(1.6,had.length/2*.016))}}catch(e){}return r}}catch(e){}
+try{const _o=talkOpen;talkOpen=function(o){const r=_o.apply(this,arguments);try{if(typeof TK!=='undefined'&&TK){const c=cx();if(c){const t=c.currentTime+.01,f=600+hash(TK.N&&TK.N.name)%5*60;blip(c,t,f,.05,'sine',.02,1.3);blip(c,t+.06,f*1.5,.07,'sine',.02,1.2)}}}catch(e){}return r}}catch(e){}
+try{const _s=storySay;storySay=function(hero,name,text){const r=_s.apply(this,arguments);try{if(text)chirp(name||hero,String(text).replace(/<[^>]+>/g,''),Math.min(1.4,String(text).length*.012))}catch(e){}return r}}catch(e){}
+
+return{O,T,pick,fadeTo,chirp,stop:()=>{O.off=true;tick()},play:()=>{O.off=false;tick()}}})();
 </script>
 <script>
 /* ============ MAIN · boot, mode switching, render loop ============ */

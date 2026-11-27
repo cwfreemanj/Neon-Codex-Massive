@@ -277,3 +277,12 @@ Isolde & Cassian 300★, Rook & Rhoka 450★, Maeve 600★, Elara 750★.
   the account's unlocks. Redemptions are counted in `misc.json → coupons`. HTTP redeem is limited to 10 tries a minute per IP.
 * To change or retire the code, set `COUPON_CODES` in Railway → Variables (e.g. `ALLOFTHEM,LAUNCHWEEK`), or set it to a random string to
   disable it. Unlocks already granted stay granted.
+
+## Music
+
+The game streams its seven background tracks from a `music/` folder **next to `index.html`**
+(menu: Codex Awakening · hub: Aurealium Haven · chapters: Beneath the Embervault / Prismatic Depths ·
+bosses: The Rift Sovereign / Ironbound Cataclysm · victory and big menus: Banners of the Dawn).
+Upload the `music/` folder to the same place as `index.html` (e.g. the GitHub Pages repo). To host the
+files elsewhere, set `music:"https://your-host/music/"` in `NCA_CONFIG` at the top of `index.html`.
+If the folder is missing the game simply plays without music. Players set the volume in Settings → Audio → Music.
